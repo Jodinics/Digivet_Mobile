@@ -6,144 +6,141 @@ class LandingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const primaryRed = Color(0xFF9E1B1B);
+    
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F8F8),
+      backgroundColor: const Color(0xFFF9FAFB),
       body: SafeArea(
         child: Stack(
           children: [
-
-            // Top Left Circle
+            // Decorative background elements
             Positioned(
-              top: -80,
-              left: -80,
-              child: Container(
-                width: 200,
-                height: 200,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFFE4E6),
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-
-            // Bottom Right Circle
-            Positioned(
-              bottom: -100,
+              top: -100,
               right: -100,
               child: Container(
-                width: 240,
-                height: 240,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFFE4E6),
+                width: 300,
+                height: 300,
+                decoration: BoxDecoration(
+                  color: primaryRed.withOpacity(0.05),
                   shape: BoxShape.circle,
                 ),
               ),
             ),
-
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 30),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-
-                    CircleAvatar(
-                      radius: 55,
-                      backgroundColor: const Color(0xFF7B1E1E),
-                      child: const Icon(
-                        Icons.pets,
-                        color: Colors.white,
-                        size: 55,
-                      ),
-                    ),
-
-                    const SizedBox(height: 25),
-
-                    const Text(
-                      "DIGIVET",
-                      style: TextStyle(
-                        fontSize: 40,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF7B1E1E),
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-
-                    const Text(
-                      "Digital Pet Vaccination\nRecord System",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    const Text(
-                      "Manage pet vaccination records quickly and securely using the DIGIVET mobile application.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 15,
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF7B1E1E),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
+            
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 30),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Spacer(),
+                  // Modern Logo Container
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: primaryRed.withOpacity(0.1),
+                          blurRadius: 30,
+                          offset: const Offset(0, 10),
                         ),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const LoginScreen(),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          "GET STARTED",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                          ),
+                      ],
+                    ),
+                    child: Image.asset(
+                      'assets/images/logo (2).png',
+                      width: 140,
+                      height: 140,
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                  const Text(
+                    "DIGIVET",
+                    style: TextStyle(
+                      fontSize: 40,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF1F2937),
+                      letterSpacing: -1,
+                    ),
+                  ),
+                  const Text(
+                    "ONLINE SYSTEM",
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: primaryRed,
+                      letterSpacing: 4,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  const Text(
+                    "The modern way to manage your pet's vaccination records securely and efficiently.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Color(0xFF6B7280),
+                      height: 1.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const Spacer(),
+                  // Modern Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 60,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryRed,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
                         ),
                       ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    TextButton(
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(
-                            builder: (context) => const LoginScreen(),
-                          ),
+                          MaterialPageRoute(builder: (context) => const LoginScreen()),
                         );
                       },
                       child: const Text(
-                        "Already have an account? Sign In",
+                        "GET STARTED",
                         style: TextStyle(
-                          color: Color(0xFF7B1E1E),
-                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1,
                         ),
                       ),
                     ),
-
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 20),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const LoginScreen()),
+                      );
+                    },
+                    child: RichText(
+                      text: TextSpan(
+                        style: const TextStyle(fontSize: 15, color: Color(0xFF6B7280)),
+                        children: [
+                          const TextSpan(text: "Already have an account? "),
+                          TextSpan(
+                            text: "Sign In",
+                            style: TextStyle(
+                              color: primaryRed,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                ],
               ),
             ),
-
           ],
         ),
       ),
