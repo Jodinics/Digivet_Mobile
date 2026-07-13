@@ -3,7 +3,7 @@ import '../screens/login_screen.dart';
 import '../screens/dashboard_screen.dart';
 import '../screens/approval_requests.dart';
 import '../screens/vacc_history.dart';
-import '../screens/updates_screen.dart';
+import '../screens/settings_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   final String currentRoute;
@@ -96,21 +96,6 @@ class AppDrawer extends StatelessWidget {
                 ),
                 _buildDrawerItem(
                   context,
-                  icon: Icons.notifications_active_rounded,
-                  title: 'Latest Updates',
-                  isSelected: currentRoute == 'updates',
-                  onTap: () {
-                    Navigator.pop(context);
-                    if (currentRoute != 'updates') {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (context) => const UpdatesScreen()),
-                      );
-                    }
-                  },
-                ),
-                _buildDrawerItem(
-                  context,
                   icon: Icons.history_edu_rounded,
                   title: 'Vaccination History',
                   isSelected: currentRoute == 'history',
@@ -135,6 +120,21 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pushReplacement(
                         context,
                         MaterialPageRoute(builder: (context) => const ApprovalRequestsScreen()),
+                      );
+                    }
+                  },
+                ),
+                _buildDrawerItem(
+                  context,
+                  icon: Icons.settings_rounded,
+                  title: 'Settings',
+                  isSelected: currentRoute == 'settings',
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (currentRoute != 'settings') {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (context) => const SettingsScreen()),
                       );
                     }
                   },

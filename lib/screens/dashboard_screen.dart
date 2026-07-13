@@ -5,8 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/menu.dart';
 import 'vacc_history.dart';
-import 'updates_screen.dart';
 import 'qr_screen.dart';
+import 'settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -278,11 +278,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const UpdatesScreen()),
-          );
+        onTap: () async {
+          final Uri url = Uri.parse('https://www.facebook.com/profile.php?id=100063921050657');
+          try {
+            await launchUrl(url, mode: LaunchMode.externalApplication);
+          } catch (e) {
+            debugPrint('Could not launch $url: $e');
+            // Fallback to internal webview if external fails
+            await launchUrl(url, mode: LaunchMode.platformDefault);
+          }
         },
         borderRadius: BorderRadius.circular(28),
         child: Column(
@@ -291,18 +295,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF9E1B1B).withOpacity(0.05),
+                color: const Color(0xFF1877F2).withOpacity(0.05),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.event_available_rounded,
+                Icons.facebook_rounded,
                 size: 40,
-                color: Color(0xFF9E1B1B),
+                color: Color(0xFF1877F2),
               ),
             ),
             const SizedBox(height: 16),
             const Text(
-              "Vaccine Drives",
+              "LCVO Updates",
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
@@ -313,7 +317,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Text(
-                "Check if your barangay has a scheduled walk-in vaccine drive",
+                "Follow our Facebook page for real-time announcements",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
@@ -440,7 +444,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           label: "Scanner", 
           color: const Color(0xFFFEF2F2), 
           iconColor: const Color(0xFF9E1B1B),
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const QRScreen())),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const QRScreen(allowLogin: false))),
         ),
         _buildActionCard(
           icon: Icons.history_edu_rounded, 
@@ -461,7 +465,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           label: "Settings", 
           color: const Color(0xFFFEF2F2),
           iconColor: const Color(0xFF9E1B1B),
-          onTap: () {},
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())),
         ),
       ],
     );
@@ -510,7 +514,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final latest = _latestVaccines[pet['pet_id']];
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(24),
@@ -522,158 +525,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
           ),
-          child: Row(
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEF2F2),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFFEE2E2)),
+          child: InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => VaccHistoryScreen(initialPetId: pet['pet_id']),
                 ),
-                child: const Icon(Icons.vaccines_rounded, color: Color(0xFF9E1B1B), size: 24),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      pet['pet_name'] ?? 'Pet',
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF1F2937),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      latest != null ? "Vaccinated on ${latest['vaccine_date']}" : "No records yet",
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade500,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right_rounded, size: 24, color: Colors.grey.shade300),
-            ],
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildSocialFeed() {
-    final List<Map<String, String>> mockPosts = [
-      {
-        "date": "2 hours ago",
-        "title": "Barangay Sabang Vaccination Drive",
-        "content": "Join us tomorrow for a free anti-rabies vaccination at the Sabang Barangay Hall starting at 8:00 AM.",
-        "type": "Event"
-      },
-      {
-        "date": "Yesterday",
-        "title": "Health Reminder: Summer Care",
-        "content": "Make sure your pets are well-hydrated during these hot months. Keep them in cool areas.",
-        "type": "Health Tip"
-      },
-    ];
-
-    return Column(
-      children: mockPosts.map((post) {
-        return Container(
-          width: double.infinity,
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
+              );
+            },
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFF9E1B1B).withOpacity(0.05)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    width: 52,
+                    height: 52,
                     decoration: BoxDecoration(
                       color: const Color(0xFFFEF2F2),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFFEE2E2)),
                     ),
-                    child: Text(
-                      post["type"]!,
-                      style: const TextStyle(
-                        color: Color(0xFF9E1B1B),
-                        fontWeight: FontWeight.w800,
-                        fontSize: 11,
-                        letterSpacing: 0.5,
-                      ),
+                    child: const Icon(Icons.vaccines_rounded, color: Color(0xFF9E1B1B), size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          pet['pet_name'] ?? 'Pet',
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF1F2937),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          latest != null ? "Vaccinated on ${latest['vaccine_date']}" : "No records yet",
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  Text(
-                    post["date"]!,
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  Icon(Icons.chevron_right_rounded, size: 24, color: Colors.grey.shade300),
                 ],
               ),
-              const SizedBox(height: 12),
-              Text(
-                post["title"]!,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF1F2937),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                post["content"]!,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                  height: 1.5,
-                  fontWeight: FontWeight.w500,
-                ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 20),
-              GestureDetector(
-                onTap: () async {
-                  final Uri url = Uri.parse('https://www.facebook.com/profile.php?id=100063921050657');
-                  await launchUrl(url, mode: LaunchMode.externalApplication);
-                },
-                child: const Row(
-                  children: [
-                    Icon(Icons.facebook_rounded, color: Color(0xFF1877F2), size: 18),
-                    SizedBox(width: 8),
-                    Text(
-                      "Read on Facebook",
-                      style: TextStyle(
-                        color: Color(0xFF1877F2),
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Spacer(),
-                    Icon(Icons.arrow_right_alt_rounded, color: Color(0xFF1877F2)),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
         );
       }).toList(),
     );
   }
+
 }

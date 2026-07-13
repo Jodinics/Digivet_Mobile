@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'qr_screen.dart';
 import 'dashboard_screen.dart';
 
@@ -18,6 +20,71 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
 
   final Color primaryRed = const Color(0xFF9E1B1B);
+
+  void _showTopSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).size.height - 160,
+          left: 24,
+          right: 24,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Future<void> _pickAndScanQR() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    
+    if (image == null) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final MobileScannerController controller = MobileScannerController();
+      final BarcodeCapture? capture = await controller.analyzeImage(image.path);
+      
+      if (capture != null && capture.barcodes.isNotEmpty) {
+        final String? code = capture.barcodes.first.rawValue;
+        if (code != null) {
+          if (code.startsWith("DIGIVET_AUTH:") || code.startsWith("DIGIVET_LOGIN:")) {
+            final String email = code.contains(":") ? code.split(":").last : code.replaceFirst("DIGIVET_AUTH:", "");
+            
+            if (mounted) {
+              _showTopSnackBar("Logging in as $email...", const Color(0xFF3B82F6));
+              
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const DashboardScreen()),
+              );
+            }
+          } else if (code.startsWith("DIGIVET_PET_") || code.startsWith("DIGIVET_RECORD:")) {
+            throw Exception("Pet Record QR codes cannot be scanned for login.");
+          } else {
+            throw Exception("Invalid Digivet Login QR");
+          }
+        }
+      } else {
+        throw Exception("No QR code found in image");
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceFirst("Exception: ", "");
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   Future<void> _handleLogin() async {
     if (_emailController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
@@ -84,7 +151,6 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 40),
-              // Logo
               Center(
                 child: Image.asset(
                   'assets/images/logo (2).png',
@@ -110,8 +176,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 40),
-
-              // Login Toggle
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
@@ -143,9 +207,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 32),
-
               if (_errorMessage != null)
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -168,7 +230,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                   ),
                 ),
-
               if (!isQrLogin) ...[
                 _buildTextField(
                   controller: _emailController,
@@ -211,7 +272,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ] else ...[
-                // QR Login UI
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(32),
@@ -225,16 +285,32 @@ class _LoginScreenState extends State<LoginScreen> {
                       const Icon(Icons.qr_code_scanner_rounded, size: 80, color: Color(0xFFD1D5DB)),
                       const SizedBox(height: 20),
                       const Text(
-                        "Scan QR Code",
+                        "Scan Login QR",
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1F2937)),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        "Position your personal QR code within the scanner frame to log in automatically.",
+                        "Position your personal QR code within the scanner or upload an image.",
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.grey.shade500, height: 1.5),
                       ),
                       const SizedBox(height: 32),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryRed,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const QRScreen(allowRecords: false, allowLogin: true))),
+                          icon: const Icon(Icons.camera_alt_rounded),
+                          label: const Text("USE CAMERA", style: TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
                         height: 50,
@@ -244,9 +320,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             side: BorderSide(color: primaryRed, width: 2),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                           ),
-                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const QRScreen())),
-                          icon: const Icon(Icons.camera_alt_rounded),
-                          label: const Text("OPEN SCANNER", style: TextStyle(fontWeight: FontWeight.w800)),
+                          onPressed: _pickAndScanQR,
+                          icon: const Icon(Icons.image_rounded),
+                          label: const Text("UPLOAD IMAGE", style: TextStyle(fontWeight: FontWeight.w800)),
                         ),
                       ),
                     ],

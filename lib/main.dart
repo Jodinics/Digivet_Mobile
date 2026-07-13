@@ -19,9 +19,34 @@ class DigiVetApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-        home: const LandingScreen(),
+      theme: ThemeData(
+        useMaterial3: true,
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        hoverColor: Colors.transparent,
+        focusColor: Colors.transparent,
+        splashFactory: NoSplash.splashFactory,
+        canvasColor: Colors.white,
+        scaffoldBackgroundColor: const Color(0xFFF9FAFB),
+        appBarTheme: const AppBarTheme(
+          surfaceTintColor: Colors.transparent,
+        ),
+        // This removes the "gray" overlay on all buttons when pressed
+        buttonTheme: const ButtonThemeData(
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+        ),
+        // For Material 3 buttons
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            splashFactory: NoSplash.splashFactory,
+            foregroundColor: const Color(0xFF9E1B1B),
+          ),
+        ),
+      ),
+      home: const LandingScreen(),
     );
   }
 }
