@@ -7,6 +7,7 @@ import '../widgets/menu.dart';
 import 'vacc_history.dart';
 import 'qr_screen.dart';
 import 'settings_screen.dart';
+import '../widgets/skeleton_loader.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -41,51 +42,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _fetchDashboardData() async {
     try {
       final session = supabase.auth.currentSession;
-      if (session == null) return;
+      if (session == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
 
       final accessToken = session.accessToken;
       _ownerName = session.user.userMetadata?['full_name'];
 
-      final petsResponse = await http.get(
-        Uri.parse('$backendUrl/api/pets/mine'),
-        headers: {
-          'Authorization': 'Bearer $accessToken',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      if (petsResponse.statusCode == 200) {
-        final List<dynamic> petsData = json.decode(petsResponse.body);
-        _pets = List<Map<String, dynamic>>.from(petsData);
-      }
-
-      if (_pets.isNotEmpty) {
-        final vaccResponse = await http.get(
+      // Parallelize requests for better performance
+      final results = await Future.wait([
+        http.get(
+          Uri.parse('$backendUrl/api/pets/mine'),
+          headers: {
+            'Authorization': 'Bearer $accessToken',
+            'Content-Type': 'application/json',
+          },
+        ),
+        http.get(
           Uri.parse('$backendUrl/api/pets/vaccinations'),
           headers: {
             'Authorization': 'Bearer $accessToken',
             'Content-Type': 'application/json',
           },
-        );
+        ),
+      ]);
 
-        if (vaccResponse.statusCode == 200) {
-          final List<dynamic> vaccData = json.decode(vaccResponse.body);
-          for (var v in vaccData) {
-            final petId = v['pet_id'] as int;
-            _latestVaccines[petId] = {
-              'vaccine_date': v['last_vaccine_date'],
-              'vaccine_details': v['last_vaccine_details'],
-            };
-          }
-        }
+      if (results[0].statusCode == 200) {
+        final List<dynamic> petsData = json.decode(results[0].body);
+        _pets = List<Map<String, dynamic>>.from(petsData);
       }
 
-      setState(() {
-        _isLoading = false;
-      });
+      if (results[1].statusCode == 200) {
+        final List<dynamic> vaccData = json.decode(results[1].body);
+        for (var v in vaccData) {
+          final petId = v['pet_id'] as int;
+          _latestVaccines[petId] = {
+            'vaccine_date': v['last_vaccine_date'],
+            'vaccine_details': v['last_vaccine_details'],
+          };
+        }
+      }
     } catch (e) {
       debugPrint('Error fetching dashboard data: $e');
-      setState(() => _isLoading = false);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -118,7 +121,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF9E1B1B)))
+          ? _buildDashboardSkeleton()
           : RefreshIndicator(
               onRefresh: _fetchDashboardData,
               color: const Color(0xFF9E1B1B),
@@ -454,13 +457,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VaccHistoryScreen())),
         ),
         _buildActionCard(
-          icon: Icons.medical_services_rounded, 
-          label: "Vets", 
-          color: const Color(0xFFFEF2F2), 
-          iconColor: const Color(0xFF9E1B1B),
-          onTap: () {},
-        ),
-        _buildActionCard(
           icon: Icons.settings_rounded, 
           label: "Settings", 
           color: const Color(0xFFFEF2F2),
@@ -581,6 +577,69 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         );
       }).toList(),
+    );
+  }
+
+  Widget _buildDashboardSkeleton() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 20),
+          const SkeletonLoader(width: 120, height: 16),
+          const SizedBox(height: 8),
+          const SkeletonLoader(width: 200, height: 32),
+          const SizedBox(height: 32),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const SkeletonLoader(width: 60, height: 12),
+              const SkeletonLoader(width: 40, height: 14),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const SkeletonLoader(width: double.infinity, height: 220, borderRadius: 32),
+          const SizedBox(height: 32),
+          const SkeletonLoader(width: 100, height: 12),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(4, (index) => Column(
+              children: [
+                const SkeletonLoader(width: 68, height: 68, borderRadius: 24),
+                const SizedBox(height: 10),
+                const SkeletonLoader(width: 40, height: 10),
+              ],
+            )),
+          ),
+          const SizedBox(height: 32),
+          const SkeletonLoader(width: 120, height: 12),
+          const SizedBox(height: 16),
+          ...List.generate(3, (index) => Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Row(
+              children: [
+                const SkeletonLoader(width: 52, height: 52, borderRadius: 16),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SkeletonLoader(width: 100, height: 16),
+                    const SizedBox(height: 6),
+                    const SkeletonLoader(width: 150, height: 12),
+                  ],
+                ),
+              ],
+            ),
+          )),
+        ],
+      ),
     );
   }
 

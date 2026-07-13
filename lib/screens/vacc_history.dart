@@ -10,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:qr_flutter/qr_flutter.dart';
 import '../widgets/menu.dart';
+import '../widgets/skeleton_loader.dart';
 import 'pet_record_screen.dart';
 
 class VaccHistoryScreen extends StatefulWidget {
@@ -40,22 +41,24 @@ class _VaccHistoryScreenState extends State<VaccHistoryScreen> {
   Future<void> _fetchAllData() async {
     try {
       final session = supabase.auth.currentSession;
-      if (session == null) return;
+      if (session == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
       final accessToken = session.accessToken;
       final headers = {
         'Authorization': 'Bearer $accessToken',
         'Content-Type': 'application/json',
       };
 
-      // 1. Fetch Reference Data (Vets, Barangays, Sessions) using existing /api/vetdata routes
+      // Fetch all required tables in parallel
       final results = await Future.wait([
         http.get(Uri.parse('$backendUrl/api/vetdata/vet_table'), headers: headers),
         http.get(Uri.parse('$backendUrl/api/vetdata/barangay_table'), headers: headers),
         http.get(Uri.parse('$backendUrl/api/vetdata/drive_session_table'), headers: headers),
-        // 2. Fetch the actual vaccine records (using the vetdata route for full columns)
         http.get(Uri.parse('$backendUrl/api/vetdata/vaccine_table'), headers: headers),
-        // 3. Fetch user's pets to filter the vaccines
         http.get(Uri.parse('$backendUrl/api/pets/mine'), headers: headers),
+        http.get(Uri.parse('$backendUrl/api/vetdata/owner_table'), headers: headers),
       ]);
 
       if (results.every((r) => r.statusCode == 200)) {
@@ -64,18 +67,12 @@ class _VaccHistoryScreenState extends State<VaccHistoryScreen> {
         final sessions = json.decode(results[2].body) as List;
         final allVaccines = json.decode(results[3].body) as List;
         final myPets = json.decode(results[4].body) as List;
+        final allOwners = json.decode(results[5].body) as List;
 
         // Build lookup maps
         _vetMap = {for (var v in vets) v['vet_id']: v['vet_name']};
         _barangayMap = {for (var b in barangays) b['barangay_id']: b['barangay_name']};
         _sessionToBarangayMap = {for (var s in sessions) s['session_id']: s['barangay_id']};
-
-        // Fetch additional owner data to populate the record screen
-        final ownerResponse = await http.get(Uri.parse('$backendUrl/api/vetdata/owner_table'), headers: headers);
-        List<dynamic> allOwners = [];
-        if (ownerResponse.statusCode == 200) {
-          allOwners = json.decode(ownerResponse.body) as List;
-        }
 
         // Structure data to match the previous grouped format
         final List<Map<String, dynamic>> groupedRecords = [];
@@ -105,14 +102,14 @@ class _VaccHistoryScreenState extends State<VaccHistoryScreen> {
 
         setState(() {
           _vaccineRecords = groupedRecords;
-          _isLoading = false;
         });
-      } else {
-        setState(() => _isLoading = false);
       }
     } catch (e) {
       debugPrint('Error fetching data: $e');
-      setState(() => _isLoading = false);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -145,7 +142,7 @@ class _VaccHistoryScreenState extends State<VaccHistoryScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF9E1B1B)))
+          ? _buildHistorySkeleton()
           : RefreshIndicator(
               onRefresh: _fetchAllData,
               color: const Color(0xFF9E1B1B),
@@ -660,6 +657,44 @@ class _VaccHistoryScreenState extends State<VaccHistoryScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistorySkeleton() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 20),
+          const SkeletonLoader(width: 100, height: 16),
+          const SizedBox(height: 8),
+          const SkeletonLoader(width: 150, height: 32),
+          const SizedBox(height: 32),
+          ...List.generate(3, (index) => Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Row(
+              children: [
+                const SkeletonLoader(width: 44, height: 44, borderRadius: 12),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SkeletonLoader(width: 120, height: 18),
+                    const SizedBox(height: 6),
+                    const SkeletonLoader(width: 150, height: 12),
+                  ],
+                ),
+              ],
+            ),
+          )),
         ],
       ),
     );

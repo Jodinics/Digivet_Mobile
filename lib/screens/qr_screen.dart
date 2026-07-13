@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:convert';
 import 'pet_record_screen.dart';
 import 'dashboard_screen.dart';
+import 'admin_dashboard_screen.dart';
 
 class QRScreen extends StatefulWidget {
   final bool allowLogin;
@@ -28,12 +29,14 @@ class _QRScreenState extends State<QRScreen> {
     super.dispose();
   }
 
-  void _onDetect(BarcodeCapture capture) async {
-    if (_isProcessing) return;
+  void _onDetect(BarcodeCapture capture) {
+    if (_isProcessing || capture.barcodes.isEmpty) return;
 
-    final barcode = capture.barcodes.first;
-    final String? code = barcode.rawValue;
+    final String? code = capture.barcodes.first.rawValue;
+    if (code == null) return;
 
+    // Immediately lock processing to prevent frame-spamming
+    setState(() => _isProcessing = true);
     _processCode(code);
   }
 
@@ -63,6 +66,9 @@ class _QRScreenState extends State<QRScreen> {
   }
 
   void _showTopSnackBar(String message, Color color) {
+    // Clear any existing snackbars to prevent alert spamming/queuing
+    ScaffoldMessenger.of(context).clearSnackBars();
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -82,28 +88,34 @@ class _QRScreenState extends State<QRScreen> {
     );
   }
 
-  void _processCode(String? code) async {
-    if (code != null) {
-      setState(() => _isProcessing = true);
-      
-      final String category = _categorize(code);
-      
-      if (category == "RECORD") {
-        if (!widget.allowRecords) {
-          _showTopSnackBar("Pet Record QR codes cannot be scanned here.", const Color(0xFFF59E0B));
-          Future.delayed(const Duration(seconds: 2), () {
-            if (mounted) setState(() => _isProcessing = false);
-          });
-          return;
-        }
+  void _navigateToDashboard(User user) {
+    if (!mounted) return;
+    
+    _showTopSnackBar("Welcome back!", const Color(0xFF10B981));
+    final role = user.userMetadata?['role']?.toString().toLowerCase();
+    
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (context) => (role == 'admin' || role == 'vet' || role == 'veterinarian') 
+            ? const AdminDashboardScreen() 
+            : const DashboardScreen(),
+      ),
+      (route) => false,
+    );
+  }
 
-        final String petId = code.contains(":") 
-            ? code.split(":").last 
-            : code.replaceFirst("DIGIVET_PET_", "");
-            
-        _showTopSnackBar("Pet Record QR Detected", const Color(0xFF3B82F6));
-        await _fetchAndShowPet(petId);
-      } else if (category == "LOGIN") {
+  void _processCode(String? code) async {
+    if (code == null) {
+      setState(() => _isProcessing = false);
+      return;
+    }
+    
+    debugPrint("Processing Code: $code");
+    
+    try {
+      // 1. New V2 Secure Format
+      if (code.startsWith("DIGIVET_V2:")) {
         if (!widget.allowLogin) {
           _showTopSnackBar("Login QR codes cannot be scanned here.", const Color(0xFFF59E0B));
           Future.delayed(const Duration(seconds: 2), () {
@@ -111,61 +123,148 @@ class _QRScreenState extends State<QRScreen> {
           });
           return;
         }
+        try {
+          final encoded = code.substring(11);
+          final decoded = utf8.decode(base64Decode(encoded));
+          final data = json.decode(decoded);
+          
+          if (data is Map && data.containsKey('e') && data.containsKey('p')) {
+            _showTopSnackBar("Secure Login Detected. Authenticating...", const Color(0xFF3B82F6));
+            
+            final response = await supabase.auth.signInWithPassword(
+              email: data['e'],
+              password: data['p'],
+            );
 
-        final String email = code.contains(":") 
-            ? code.split(":").last 
-            : code.replaceFirst("DIGIVET_AUTH:", "");
+            if (mounted && response.session != null) {
+              _navigateToDashboard(response.session!.user);
+              return;
+            }
+          }
+        } catch (e) {
+          debugPrint("V2 Decode Error: $e");
+        }
+      }
 
-        _showTopSnackBar("Login QR Detected", const Color(0xFF10B981));
-        await _handleQRLogin(email);
+      // 2. Try Token Login (Primary Method)
+      if (code.startsWith("DIGIVET_TOKEN:")) {
+        if (!widget.allowLogin) {
+          _showTopSnackBar("Login QR codes cannot be scanned here.", const Color(0xFFF59E0B));
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) setState(() => _isProcessing = false);
+          });
+          return;
+        }
+        final String token = code.replaceFirst("DIGIVET_TOKEN:", "");
+        await _handleTokenLogin(token);
+        return;
+      }
+
+      // 3. Try JSON processing (Legacy JSON)
+      try {
+        final data = json.decode(code);
+        if (data is Map) {
+          // Case A: Full Credentials (from Web Welcome screen)
+          if (data.containsKey('email') && data.containsKey('password')) {
+            if (!widget.allowLogin) {
+              _showTopSnackBar("Login QR codes cannot be scanned here.", const Color(0xFFF59E0B));
+              setState(() => _isProcessing = false);
+              return;
+            }
+
+            _showTopSnackBar("QR Credentials Detected. Logging in...", const Color(0xFF3B82F6));
+            
+            final response = await supabase.auth.signInWithPassword(
+              email: data['email'],
+              password: data['password'],
+            );
+
+            if (mounted && response.session != null) {
+              _navigateToDashboard(response.session!.user);
+              return;
+            }
+          }
+          // ... (keep Case B)
+          
+          // Case B: Profile Data (Record view only)
+          if (data['type'] == 'DIGIVET_OWNER') {
+            if (!widget.allowRecords) {
+              _showTopSnackBar("Pet Record QR codes cannot be scanned here.", const Color(0xFFF59E0B));
+              setState(() => _isProcessing = false);
+              return;
+            }
+            
+            if (data['pets'] != null && (data['pets'] as List).isNotEmpty) {
+               _showTopSnackBar("Owner Record Detected", const Color(0xFF3B82F6));
+               _showTopSnackBar("Please scan an individual Pet QR for full medical history.", const Color(0xFFF59E0B));
+               Future.delayed(const Duration(seconds: 2), () {
+                 if (mounted) setState(() => _isProcessing = false);
+               });
+               return;
+            }
+          }
+        }
+      } catch (_) {}
+
+      // 3. Prefix Check for Records or Legacy/Auth
+      if (code.startsWith("DIGIVET_PET_") || code.startsWith("DIGIVET_RECORD:")) {
+        if (!widget.allowRecords) {
+          _showTopSnackBar("Pet Record QR codes cannot be scanned here.", const Color(0xFFF59E0B));
+          setState(() => _isProcessing = false);
+          return;
+        }
+        final String petId = code.contains(":") ? code.split(":").last : code.replaceFirst("DIGIVET_PET_", "");
+        _showTopSnackBar("Pet Record QR Detected", const Color(0xFF3B82F6));
+        await _fetchAndShowPet(petId);
+      } else if (code.startsWith("DIGIVET_AUTH:") || code.startsWith("DIGIVET_LOGIN:")) {
+         _showTopSnackBar("This QR format is outdated. Please use the QR code from App Settings.", const Color(0xFFF59E0B));
+         Future.delayed(const Duration(seconds: 2), () {
+           if (mounted) setState(() => _isProcessing = false);
+         });
       } else {
         _showTopSnackBar("Invalid Digivet QR Code", const Color(0xFFEF4444));
+        // Add a delay before re-enabling scanning to prevent continuous "Invalid" alerts
         Future.delayed(const Duration(seconds: 2), () {
           if (mounted) setState(() => _isProcessing = false);
         });
       }
-    }
-  }
-
-  String _categorize(String code) {
-    if (code.startsWith("DIGIVET_PET_") || code.startsWith("DIGIVET_RECORD:")) {
-      return "RECORD";
-    } else if (code.startsWith("DIGIVET_AUTH:") || code.startsWith("DIGIVET_LOGIN:")) {
-      return "LOGIN";
-    }
-    return "UNKNOWN";
-  }
-
-  Future<void> _handleQRLogin(String email) async {
-    try {
-      _showTopSnackBar("Logging in as $email...", const Color(0xFF3B82F6));
-
-      // We can't really "login" without a password or token via Supabase client safely
-      // unless we use a custom server function.
-      // However, for the demo, if we are on the Login screen, we can simulate success
-      // or navigate to dashboard if we assume the QR is valid.
-      
-      // Let's check if the user is already logged in
-      if (supabase.auth.currentSession != null) {
-        if (mounted) {
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (context) => const DashboardScreen()),
-            (route) => false,
-          );
-        }
-        return;
-      }
-
-      // NOTE: For demo purposes, we will navigate to Dashboard. 
-      // In a real app, the QR would contain a one-time-token.
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const DashboardScreen()),
-        (route) => false,
-      );
     } catch (e) {
-      _showTopSnackBar("Login Failed: ${e.toString()}", const Color(0xFFEF4444));
+      _showTopSnackBar("Error: ${e.toString()}", const Color(0xFFEF4444));
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _isProcessing = false);
+      });
+    }
+  }
+
+  Future<void> _handleTokenLogin(String token) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$backendUrl/api/auth/qr-login'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'qr_token': token}),
+      );
+
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        final String email = data['email'];
+        final String otpToken = data['token'];
+
+        final authRes = await supabase.auth.verifyOTP(
+          email: email,
+          token: otpToken,
+          type: OtpType.magiclink,
+        );
+
+        if (mounted && authRes.session != null) {
+          _navigateToDashboard(authRes.session!.user);
+        }
+      } else {
+        final err = json.decode(res.body)['error'] ?? "Login failed";
+        _showTopSnackBar(err, const Color(0xFFEF4444));
+        setState(() => _isProcessing = false);
+      }
+    } catch (e) {
+      _showTopSnackBar("Connection error", const Color(0xFFEF4444));
       setState(() => _isProcessing = false);
     }
   }
@@ -248,15 +347,33 @@ class _QRScreenState extends State<QRScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    // Precisely center the scan window in the physical screen
+    final scanWindow = Rect.fromCenter(
+      center: Offset(screenSize.width / 2, screenSize.height / 2),
+      width: 260,
+      height: 260,
+    );
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF2D2D2D)),
-        title: Image.asset(
-          'assets/images/logo (2).png',
-          height: 45,
+        iconTheme: const IconThemeData(color: Colors.white),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          "QR SCANNER",
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1,
+            fontSize: 18,
+          ),
         ),
         centerTitle: true,
       ),
@@ -265,15 +382,51 @@ class _QRScreenState extends State<QRScreen> {
           MobileScanner(
             controller: _scannerController,
             onDetect: _onDetect,
+            scanWindow: scanWindow,
           ),
-          // Overlay to make it look modern
+          // Darkened background with cutout
+          ColorFiltered(
+            colorFilter: ColorFilter.mode(
+              Colors.black.withOpacity(0.7),
+              BlendMode.srcOut,
+            ),
+            child: Stack(
+              children: [
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.black,
+                    backgroundBlendMode: BlendMode.dstOut,
+                  ),
+                ),
+                Center(
+                  child: Container(
+                    width: 260,
+                    height: 260,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Visual guide box
           Center(
             child: Container(
-              width: 250,
-              height: 250,
+              width: 260,
+              height: 260,
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.white, width: 2),
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: Stack(
+                children: [
+                  // Corner accents
+                  ..._buildCorners(),
+                  // Animated scan line
+                  const _ScannerLine(width: 260),
+                ],
               ),
             ),
           ),
@@ -282,39 +435,187 @@ class _QRScreenState extends State<QRScreen> {
             left: 24,
             right: 24,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  child: Text(
-                    _isProcessing ? "Processing..." : "Align QR code within the frame",
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                Text(
+                  _isProcessing ? "Verifying..." : "Point at a Digivet QR Code",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF9E1B1B),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                const SizedBox(height: 32),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildActionButton(
+                        icon: Icons.image_rounded,
+                        label: "Gallery",
+                        onTap: _isProcessing ? null : _pickAndScanQR,
+                      ),
                     ),
-                    onPressed: _isProcessing ? null : _pickAndScanQR,
-                    icon: const Icon(Icons.image_rounded),
-                    label: const Text("UPLOAD FROM GALLERY", style: TextStyle(fontWeight: FontWeight.w800)),
-                  ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _buildActionButton(
+                        icon: Icons.flashlight_on_rounded,
+                        label: "Flash",
+                        onTap: () => _scannerController.toggleTorch(),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  List<Widget> _buildCorners() {
+    const double cornerSize = 40;
+    const double thickness = 6;
+    const Color color = Colors.white;
+
+    return [
+      // Top Left
+      Positioned(
+        top: 0, left: 0,
+        child: Container(
+          width: cornerSize, height: thickness,
+          decoration: const BoxDecoration(color: color, borderRadius: BorderRadius.horizontal(left: Radius.circular(3))),
+        ),
+      ),
+      Positioned(
+        top: 0, left: 0,
+        child: Container(
+          width: thickness, height: cornerSize,
+          decoration: const BoxDecoration(color: color, borderRadius: BorderRadius.vertical(top: Radius.circular(3))),
+        ),
+      ),
+      // Top Right
+      Positioned(
+        top: 0, right: 0,
+        child: Container(
+          width: cornerSize, height: thickness,
+          decoration: const BoxDecoration(color: color, borderRadius: BorderRadius.horizontal(right: Radius.circular(3))),
+        ),
+      ),
+      Positioned(
+        top: 0, right: 0,
+        child: Container(
+          width: thickness, height: cornerSize,
+          decoration: const BoxDecoration(color: color, borderRadius: BorderRadius.vertical(top: Radius.circular(3))),
+        ),
+      ),
+      // Bottom Left
+      Positioned(
+        bottom: 0, left: 0,
+        child: Container(
+          width: cornerSize, height: thickness,
+          decoration: const BoxDecoration(color: color, borderRadius: BorderRadius.horizontal(left: Radius.circular(3))),
+        ),
+      ),
+      Positioned(
+        bottom: 0, left: 0,
+        child: Container(
+          width: thickness, height: cornerSize,
+          decoration: const BoxDecoration(color: color, borderRadius: BorderRadius.vertical(bottom: Radius.circular(3))),
+        ),
+      ),
+      // Bottom Right
+      Positioned(
+        bottom: 0, right: 0,
+        child: Container(
+          width: cornerSize, height: thickness,
+          decoration: const BoxDecoration(color: color, borderRadius: BorderRadius.horizontal(right: Radius.circular(3))),
+        ),
+      ),
+      Positioned(
+        bottom: 0, right: 0,
+        child: Container(
+          width: thickness, height: cornerSize,
+          decoration: const BoxDecoration(color: color, borderRadius: BorderRadius.vertical(bottom: Radius.circular(3))),
+        ),
+      ),
+    ];
+  }
+
+  Widget _buildActionButton({required IconData icon, required String label, VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.1)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: Colors.white, size: 28),
+            const SizedBox(height: 8),
+            Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScannerLine extends StatefulWidget {
+  final double width;
+  const _ScannerLine({required this.width});
+
+  @override
+  State<_ScannerLine> createState() => _ScannerLineState();
+}
+
+class _ScannerLineState extends State<_ScannerLine> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Positioned(
+          top: _controller.value * widget.width,
+          left: 0,
+          right: 0,
+          child: Container(
+            height: 2,
+            decoration: BoxDecoration(
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.red.withOpacity(0.5),
+                  blurRadius: 4,
+                  spreadRadius: 2,
+                ),
+              ],
+              gradient: const LinearGradient(
+                colors: [Colors.transparent, Colors.red, Colors.transparent],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

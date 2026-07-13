@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'qr_screen.dart';
 import 'dashboard_screen.dart';
+import 'admin_dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,6 +16,8 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final supabase = Supabase.instance.client;
+  final String backendUrl = 'https://digivetonline-api.onrender.com';
   bool isQrLogin = false;
   bool _isLoading = false;
   String? _errorMessage;
@@ -56,22 +61,68 @@ class _LoginScreenState extends State<LoginScreen> {
       if (capture != null && capture.barcodes.isNotEmpty) {
         final String? code = capture.barcodes.first.rawValue;
         if (code != null) {
-          if (code.startsWith("DIGIVET_AUTH:") || code.startsWith("DIGIVET_LOGIN:")) {
-            final String email = code.contains(":") ? code.split(":").last : code.replaceFirst("DIGIVET_AUTH:", "");
-            
-            if (mounted) {
-              _showTopSnackBar("Logging in as $email...", const Color(0xFF3B82F6));
+          debugPrint("Scanned QR: $code");
+          
+          // 1. New V2 Secure Format
+          if (code.startsWith("DIGIVET_V2:")) {
+            try {
+              final encoded = code.substring(11);
+              final decoded = utf8.decode(base64Decode(encoded));
+              final data = json.decode(decoded);
               
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const DashboardScreen()),
-              );
+              if (data is Map && data.containsKey('e') && data.containsKey('p')) {
+                _showTopSnackBar("Secure Login Detected. Authenticating...", const Color(0xFF3B82F6));
+                
+                final response = await supabase.auth.signInWithPassword(
+                  email: data['e'],
+                  password: data['p'],
+                );
+
+                if (mounted && response.session != null) {
+                  _navigateToDashboard(response.session!.user);
+                  return;
+                }
+              }
+            } catch (e) {
+              debugPrint("V2 Decode Error: $e");
             }
-          } else if (code.startsWith("DIGIVET_PET_") || code.startsWith("DIGIVET_RECORD:")) {
-            throw Exception("Pet Record QR codes cannot be scanned for login.");
-          } else {
-            throw Exception("Invalid Digivet Login QR");
           }
+
+          // 2. Try Token Login (New Secure Method)
+          if (code.startsWith("DIGIVET_TOKEN:")) {
+            final String token = code.replaceFirst("DIGIVET_TOKEN:", "");
+            _handleTokenLogin(token);
+            return;
+          }
+
+          // 3. Try JSON Login (Web Welcome)
+          try {
+            final data = json.decode(code);
+            if (data is Map && data.containsKey('email') && data.containsKey('password')) {
+              _showTopSnackBar("QR Credentials Detected. Logging in...", const Color(0xFF3B82F6));
+              
+              final response = await supabase.auth.signInWithPassword(
+                email: data['email'],
+                password: data['password'],
+              );
+
+              if (mounted && response.session != null) {
+                _navigateToDashboard(response.session!.user);
+                return;
+              }
+            }
+          } catch (_) {}
+
+          // 4. Legacy Check
+          if (code.startsWith("DIGIVET_AUTH:") || code.startsWith("DIGIVET_LOGIN:")) {
+             throw Exception("This QR format is outdated. Please re-generate the QR code from your App Settings.");
+          }
+          
+          if (code.startsWith("DIGIVET_PET_") || code.startsWith("DIGIVET_RECORD:")) {
+            throw Exception("Pet Record QR codes cannot be scanned for login.");
+          }
+
+          throw Exception("Invalid Digivet Login QR");
         }
       } else {
         throw Exception("No QR code found in image");
@@ -83,6 +134,63 @@ class _LoginScreenState extends State<LoginScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  void _navigateToDashboard(User user) {
+    if (!mounted) return;
+    
+    _showTopSnackBar("Welcome back!", const Color(0xFF10B981));
+    
+    final metadata = user.userMetadata;
+    final role = metadata?['role']?.toString().toLowerCase();
+    
+    // Log for debugging
+    debugPrint("Login Successful: ${user.email}, Role: $role");
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (context) => (role == 'admin' || role == 'vet' || role == 'veterinarian') 
+            ? const AdminDashboardScreen() 
+            : const DashboardScreen(),
+      ),
+      (route) => false,
+    );
+  }
+
+  Future<void> _handleTokenLogin(String token) async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await http.post(
+        Uri.parse('$backendUrl/api/auth/qr-login'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'qr_token': token}),
+      );
+
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        final String email = data['email'];
+        final String otpToken = data['token'];
+
+        // Verify with Supabase
+        final authRes = await supabase.auth.verifyOTP(
+          email: email,
+          token: otpToken,
+          type: OtpType.magiclink,
+        );
+
+        if (mounted && authRes.session != null) {
+          _navigateToDashboard(authRes.session!.user);
+        }
+      } else {
+        final err = json.decode(res.body)['error'] ?? "Login failed";
+        _showTopSnackBar(err, const Color(0xFFEF4444));
+      }
+    } catch (e) {
+      _showTopSnackBar("Connection error", const Color(0xFFEF4444));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -100,17 +208,13 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
+      final response = await Supabase.instance.client.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const DashboardScreen(),
-          ),
-        );
+
+      if (mounted && response.session != null) {
+        _navigateToDashboard(response.session!.user);
       }
     } on AuthException catch (e) {
       setState(() {

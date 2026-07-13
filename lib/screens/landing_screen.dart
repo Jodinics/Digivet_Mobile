@@ -113,7 +113,7 @@ class LandingScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   TextButton(
                     onPressed: () {
                       Navigator.push(
@@ -137,7 +137,7 @@ class LandingScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../screens/login_screen.dart';
 import '../screens/dashboard_screen.dart';
+import '../screens/admin_dashboard_screen.dart';
 import '../screens/approval_requests.dart';
 import '../screens/vacc_history.dart';
 import '../screens/settings_screen.dart';
@@ -13,6 +15,10 @@ class AppDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     const brandRed = Color(0xFF9E1B1B);
     const darkRed = Color(0xFF7B1E1E);
+    
+    final session = Supabase.instance.client.auth.currentSession;
+    final role = session?.user.userMetadata?['role']?.toString().toLowerCase();
+    final bool isAdmin = role == 'admin' || role == 'vet' || role == 'veterinarian';
 
     return Drawer(
       backgroundColor: brandRed,
@@ -89,30 +95,36 @@ class AppDrawer extends StatelessWidget {
                     if (currentRoute != 'overview') {
                       Navigator.pushReplacement(
                         context,
-                        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+                        MaterialPageRoute(
+                          builder: (context) => isAdmin 
+                              ? const AdminDashboardScreen() 
+                              : const DashboardScreen(),
+                        ),
                       );
                     }
                   },
                 ),
+                // Only show Vaccination History for Pet Owners
+                if (!isAdmin)
+                  _buildDrawerItem(
+                    context,
+                    icon: Icons.history_edu_rounded,
+                    title: 'Vaccination History',
+                    isSelected: currentRoute == 'history',
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (currentRoute != 'history') {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (context) => const VaccHistoryScreen()),
+                        );
+                      }
+                    },
+                  ),
                 _buildDrawerItem(
                   context,
-                  icon: Icons.history_edu_rounded,
-                  title: 'Vaccination History',
-                  isSelected: currentRoute == 'history',
-                  onTap: () {
-                    Navigator.pop(context);
-                    if (currentRoute != 'history') {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (context) => const VaccHistoryScreen()),
-                      );
-                    }
-                  },
-                ),
-                _buildDrawerItem(
-                  context,
-                  icon: Icons.pending_actions_rounded,
-                  title: 'Approval Requests',
+                  icon: isAdmin ? Icons.how_to_reg_rounded : Icons.pending_actions_rounded,
+                  title: isAdmin ? 'Approvals' : 'Approval Requests',
                   isSelected: currentRoute == 'approvals',
                   onTap: () {
                     Navigator.pop(context);
@@ -124,6 +136,29 @@ class AppDrawer extends StatelessWidget {
                     }
                   },
                 ),
+                // Add an Admin-specific Analytics/Reports placeholder if needed
+                if (isAdmin)
+                   _buildDrawerItem(
+                    context,
+                    icon: Icons.analytics_rounded,
+                    title: 'Reports',
+                    isSelected: false,
+                    onTap: () {
+                      Navigator.pop(context);
+                      // Placeholder for future reports
+                    },
+                  ),
+              ],
+            ),
+          ),
+          
+          // Footer / Settings & Logout
+          Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              children: [
+                const Divider(color: Colors.white24, height: 1),
+                const SizedBox(height: 8),
                 _buildDrawerItem(
                   context,
                   icon: Icons.settings_rounded,
@@ -139,17 +174,6 @@ class AppDrawer extends StatelessWidget {
                     }
                   },
                 ),
-              ],
-            ),
-          ),
-          
-          // Footer / Logout
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              children: [
-                const Divider(color: Colors.white24, height: 1),
-                const SizedBox(height: 16),
                 _buildDrawerItem(
                   context,
                   icon: Icons.logout_rounded,
@@ -228,12 +252,15 @@ class AppDrawer extends StatelessWidget {
               elevation: 0,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            onPressed: () {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
-                (route) => false,
-              );
+            onPressed: () async {
+              await Supabase.instance.client.auth.signOut();
+              if (context.mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (route) => false,
+                );
+              }
             },
             child: const Text("Logout", style: TextStyle(fontWeight: FontWeight.w800)),
           ),

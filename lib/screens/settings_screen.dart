@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
@@ -122,7 +123,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
 
       if (response.user != null) {
-        if (mounted) _showLoginQR(email);
+        if (mounted) _showLoginQR(email, password);
       }
     } catch (e) {
       if (mounted) {
@@ -135,7 +136,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _showLoginQR(String email) {
+  void _showLoginQR(String email, String password) {
+    // Generate a secure V2 login package. 
+    // Base64 encoding makes the QR code much easier to scan reliably.
+    final payload = json.encode({
+      'e': email,
+      'p': password,
+      't': DateTime.now().millisecondsSinceEpoch,
+    });
+    final String qrData = "DIGIVET_V2:${base64Encode(utf8.encode(payload))}";
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -201,7 +211,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             RepaintBoundary(
               key: _qrKey,
               child: GestureDetector(
-                onTap: () => _showFullscreenQR(email),
+                onTap: () => _showFullscreenQR(qrData, email),
                 child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -217,7 +227,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     border: Border.all(color: Colors.grey.shade100),
                   ),
                   child: QrImageView(
-                    data: "DIGIVET_LOGIN:$email",
+                    data: qrData,
                     version: QrVersions.auto,
                     size: 200.0,
                     eyeStyle: const QrEyeStyle(
@@ -272,7 +282,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showFullscreenQR(String email) {
+  void _showFullscreenQR(String qrData, String email) {
     showDialog(
       context: context,
       builder: (context) => Dialog.fullscreen(
@@ -312,7 +322,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 border: Border.all(color: Colors.grey.shade100),
               ),
               child: QrImageView(
-                data: "DIGIVET_LOGIN:$email",
+                data: qrData,
                 version: QrVersions.auto,
                 size: MediaQuery.of(context).size.width * 0.7,
                 eyeStyle: const QrEyeStyle(
