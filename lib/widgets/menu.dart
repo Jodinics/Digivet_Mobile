@@ -3,9 +3,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../screens/login_screen.dart';
 import '../screens/dashboard_screen.dart';
 import '../screens/admin_dashboard_screen.dart';
+import '../screens/admin_records_screen.dart';
 import '../screens/approval_requests.dart';
 import '../screens/vacc_history.dart';
 import '../screens/settings_screen.dart';
+import '../screens/admin_debug_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   final String currentRoute;
@@ -123,7 +125,7 @@ class AppDrawer extends StatelessWidget {
                   ),
                 _buildDrawerItem(
                   context,
-                  icon: isAdmin ? Icons.how_to_reg_rounded : Icons.pending_actions_rounded,
+                  icon: Icons.how_to_reg_rounded,
                   title: isAdmin ? 'Approvals' : 'Approval Requests',
                   isSelected: currentRoute == 'approvals',
                   onTap: () {
@@ -136,6 +138,22 @@ class AppDrawer extends StatelessWidget {
                     }
                   },
                 ),
+                if (isAdmin)
+                  _buildDrawerItem(
+                    context,
+                    icon: Icons.storage_rounded,
+                    title: 'Owner Records',
+                    isSelected: currentRoute == 'records',
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (currentRoute != 'records') {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (context) => const AdminRecordsScreen()),
+                        );
+                      }
+                    },
+                  ),
                 // Add an Admin-specific Analytics/Reports placeholder if needed
                 if (isAdmin)
                    _buildDrawerItem(
@@ -146,6 +164,22 @@ class AppDrawer extends StatelessWidget {
                     onTap: () {
                       Navigator.pop(context);
                       // Placeholder for future reports
+                    },
+                  ),
+                if (isAdmin)
+                  _buildDrawerItem(
+                    context,
+                    icon: Icons.bug_report_rounded,
+                    title: 'Debug Menu',
+                    isSelected: currentRoute == 'debug',
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (currentRoute != 'debug') {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (context) => const AdminDebugScreen()),
+                        );
+                      }
                     },
                   ),
               ],

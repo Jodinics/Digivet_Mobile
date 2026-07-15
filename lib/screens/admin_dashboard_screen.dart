@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
 import '../widgets/menu.dart';
 import '../widgets/skeleton_loader.dart';
+import 'admin_debug_screen.dart';
+import 'admin_records_screen.dart';
 import 'approval_requests.dart';
 import 'qr_screen.dart';
 
@@ -23,6 +25,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _totalPets = 0;
   int _totalVaccinations = 0;
   List<dynamic> _recentRequests = [];
+  Map<int, String> _petNames = {};
 
   @override
   void initState() {
@@ -45,7 +48,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
       // Fetch overview data in parallel
       final results = await Future.wait([
-        http.get(Uri.parse('$backendUrl/api/vetdata/pet_edit_requests'), headers: headers).timeout(const Duration(seconds: 10)),
+        http.get(Uri.parse('$backendUrl/api/pets/all-requests'), headers: headers).timeout(const Duration(seconds: 10)),
         http.get(Uri.parse('$backendUrl/api/vetdata/pet_table'), headers: headers).timeout(const Duration(seconds: 10)),
         http.get(Uri.parse('$backendUrl/api/vetdata/vaccine_table'), headers: headers).timeout(const Duration(seconds: 10)),
       ]);
@@ -57,11 +60,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
         if (reqData is List && petData is List && vaccData is List) {
           setState(() {
+            _petNames = {for (var p in petData) p['pet_id']: p['pet_name']};
             _pendingCount = reqData.where((r) => r['status'] == 'pending').length;
             _totalPets = petData.length;
             _totalVaccinations = vaccData.length;
             _recentRequests = reqData
-                .where((r) => r['status'] == 'pending')
                 .take(3)
                 .toList();
           });
@@ -83,7 +86,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     const brandRed = Color(0xFF9E1B1B);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F4F6),
+      backgroundColor: const Color(0xFFF9FAFB),
       drawer: const AppDrawer(currentRoute: 'overview'),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -104,28 +107,36 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 20),
-                  const Text("Admin Portal", style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w500)),
-                  const Text("DASHBOARD", style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF111827))),
+                  const Text("Admin portal", style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.w500)),
+                  const Text("Dashboard", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Color(0xFF111827))),
+                  const SizedBox(height: 24),
+                  _buildSearchBar(),
                   const SizedBox(height: 32),
                   
                   // Stats Grid
                   Row(
                     children: [
-                      _buildStatCard("PENDING", _pendingCount.toString(), Icons.pending_actions_rounded, Colors.orange),
-                      const SizedBox(width: 16),
-                      _buildStatCard("PETS", _totalPets.toString(), Icons.pets_rounded, brandRed),
+                      _buildStatCard("Pending", _pendingCount.toString(), Icons.how_to_reg_rounded, Colors.orange, onTap: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const ApprovalRequestsScreen()));
+                      }),
+                      const SizedBox(width: 12),
+                      _buildStatCard("Pets", _totalPets.toString(), Icons.pets_rounded, brandRed, onTap: () {
+                         Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminRecordsScreen()));
+                      }),
+                      const SizedBox(width: 12),
+                      _buildStatCard("Vaccinations", _totalVaccinations.toString(), Icons.vaccines_rounded, Colors.blue, onTap: () {
+                         Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminRecordsScreen()));
+                      }),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  _buildStatCard("VACCINATIONS", _totalVaccinations.toString(), Icons.vaccines_rounded, Colors.blue, fullWidth: true),
                   
                   const SizedBox(height: 32),
-                  _buildSectionHeader("QUICK ACTIONS"),
+                  _buildSectionHeader("Quick actions"),
                   const SizedBox(height: 16),
                   _buildQuickActions(),
-                  
+
                   const SizedBox(height: 32),
-                  _buildSectionHeader("RECENT REQUESTS", onSeeAll: () {
+                  _buildSectionHeader("Recent requests", onSeeAll: () {
                     Navigator.push(context, MaterialPageRoute(builder: (context) => const ApprovalRequestsScreen()));
                   }),
                   const SizedBox(height: 16),
@@ -143,69 +154,140 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Widget _buildAdminSkeleton() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 20),
-          const SkeletonLoader(width: 100, height: 16),
+          const SkeletonLoader(width: 100, height: 14),
           const SizedBox(height: 8),
-          const SkeletonLoader(width: 180, height: 32),
+          const SkeletonLoader(width: 200, height: 32),
+          const SizedBox(height: 24),
+          const SkeletonLoader(width: double.infinity, height: 50, borderRadius: 16),
           const SizedBox(height: 32),
           Row(
             children: [
-              const Expanded(child: SkeletonLoader(width: double.infinity, height: 140, borderRadius: 28)),
-              const SizedBox(width: 16),
-              const Expanded(child: SkeletonLoader(width: double.infinity, height: 140, borderRadius: 28)),
+              Expanded(child: const SkeletonLoader(width: double.infinity, height: 100, borderRadius: 24)),
+              const SizedBox(width: 12),
+              Expanded(child: const SkeletonLoader(width: double.infinity, height: 100, borderRadius: 24)),
+              const SizedBox(width: 12),
+              Expanded(child: const SkeletonLoader(width: double.infinity, height: 100, borderRadius: 24)),
             ],
           ),
-          const SizedBox(height: 16),
-          const SkeletonLoader(width: double.infinity, height: 140, borderRadius: 28),
           const SizedBox(height: 32),
-          const SkeletonLoader(width: 120, height: 12),
+          const SkeletonLoader(width: 120, height: 14),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(4, (i) => const SkeletonLoader(width: 68, height: 68, borderRadius: 24)),
+            children: List.generate(4, (index) => const SkeletonLoader(width: 64, height: 64, borderRadius: 20)),
           ),
+          const SizedBox(height: 32),
+          const SkeletonLoader(width: 140, height: 14),
+          const SizedBox(height: 16),
+          ...List.generate(3, (index) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: const SkeletonLoader(width: double.infinity, height: 80, borderRadius: 20),
+          )),
         ],
       ),
     );
   }
 
-  Widget _buildStatCard(String label, String value, IconData icon, Color color, {bool fullWidth = false}) {
-    Widget card = Container(
-      width: fullWidth ? double.infinity : null,
-      padding: const EdgeInsets.all(24),
+  Widget _buildSearchBar() {
+    return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(height: 16),
-          Text(value, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Color(0xFF111827))),
-          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.grey.shade500, letterSpacing: 1)),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade100),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
+      child: TextField(
+        decoration: InputDecoration(
+          hintText: "Search patients, owners, requests",
+          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 15),
+          prefixIcon: Icon(Icons.search_rounded, color: Colors.grey.shade400, size: 22),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 15),
+        ),
+      ),
     );
+  }
 
-    if (fullWidth) return card;
-    return Expanded(child: card);
+  Widget _buildStatCard(String label, String value, IconData icon, Color color, {VoidCallback? onTap}) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.grey.shade100),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              )
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: color, size: 22),
+              const SizedBox(height: 12),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF111827),
+                ),
+              ),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildSectionHeader(String title, {VoidCallback? onSeeAll}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.grey.shade500, letterSpacing: 1.2)),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: Colors.grey.shade600,
+          ),
+        ),
         if (onSeeAll != null)
           GestureDetector(
             onTap: onSeeAll,
-            child: const Text("See all", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF9E1B1B))),
+            child: const Text(
+              "See all",
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF9E1B1B),
+              ),
+            ),
           ),
       ],
     );
@@ -220,53 +302,162 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         }),
         _buildActionItem(Icons.how_to_reg_rounded, "Approvals", () {
           Navigator.push(context, MaterialPageRoute(builder: (context) => const ApprovalRequestsScreen()));
+        }, badgeCount: _pendingCount),
+        _buildActionItem(Icons.shield_rounded, "Vets", () {}),
+        _buildActionItem(Icons.storage_rounded, "Records", () {
+          Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminRecordsScreen()));
         }),
-        _buildActionItem(Icons.add_moderator_rounded, "Vets", () {}),
-        _buildActionItem(Icons.analytics_rounded, "Reports", () {}),
       ],
     );
   }
 
-  Widget _buildActionItem(IconData icon, String label, VoidCallback onTap) {
+  Widget _buildActionItem(IconData icon, String label, VoidCallback onTap, {int badgeCount = 0}) {
     return GestureDetector(
       onTap: onTap,
       child: Column(
         children: [
-          Container(
-            width: 68, height: 68,
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.grey.shade200)),
-            child: Icon(icon, color: const Color(0xFF9E1B1B), size: 28),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.grey.shade100),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.02),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    )
+                  ],
+                ),
+                child: Icon(icon, color: const Color(0xFF9E1B1B), size: 26),
+              ),
+              if (badgeCount > 0)
+                Positioned(
+                  top: -5,
+                  right: -5,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF9E1B1B),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      badgeCount.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 10),
-          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF4B5563))),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1F2937),
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildRequestItem(Map<String, dynamic> req) {
+    final petName = _petNames[req['pet_id']] ?? "Unknown";
+    final initials = petName.length >= 2 ? petName.substring(0, 2).toUpperCase() : petName.toUpperCase();
+    final status = req['status']?.toString().toLowerCase() ?? 'pending';
+    
+    Color statusColor;
+    Color statusBg;
+    if (status == 'approved') {
+      statusColor = const Color(0xFF10B981);
+      statusBg = const Color(0xFFECFDF5);
+    } else if (status == 'rejected') {
+      statusColor = const Color(0xFFEF4444);
+      statusBg = const Color(0xFFFEF2F2);
+    } else {
+      statusColor = const Color(0xFFF59E0B);
+      statusBg = const Color(0xFFFFF7ED);
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade100),
+      ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), shape: BoxShape.circle),
-            child: const Icon(Icons.edit_note_rounded, color: Colors.orange),
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFF9E1B1B).withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                initials,
+                style: const TextStyle(
+                  color: Color(0xFF9E1B1B),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Edit Request #${req['request_id']}", style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF1F2937))),
-                Text("Pet ID: ${req['pet_id']}", style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                Text(
+                  "$petName · vaccination record",
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: Color(0xFF1F2937),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  "Owner: ${req['owner_id']}",
+                  style: TextStyle(
+                    color: Colors.grey.shade500,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: statusBg,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              status[0].toUpperCase() + status.substring(1),
+              style: TextStyle(
+                color: statusColor,
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
         ],
       ),
     );

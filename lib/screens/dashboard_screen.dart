@@ -26,25 +26,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
   int _currentPetPage = 0;
   final PageController _pageController = PageController();
+  RealtimeChannel? _realtimeChannel;
 
   @override
   void initState() {
     super.initState();
     _fetchDashboardData();
+    _setupRealtimeListener();
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    if (_realtimeChannel != null) {
+      supabase.removeChannel(_realtimeChannel!);
+    }
     super.dispose();
   }
 
-  Future<void> _fetchDashboardData() async {
+  void _setupRealtimeListener() {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final ownerId = user.userMetadata?['owner_id'];
+    
+    // Create a channel to listen for changes
+    _realtimeChannel = supabase.channel('dashboard-realtime');
+
+    // Listen for pet updates specific to this owner
+    if (ownerId != null) {
+      _realtimeChannel!.onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'pet_table',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'owner_id',
+          value: ownerId,
+        ),
+        callback: (payload) {
+          debugPrint('Real-time Pet Update: ${payload.eventType}');
+          _fetchDashboardData(silent: true);
+        },
+      );
+    }
+
+    // Listen for any vaccine updates (since we can't filter by owner_id directly here)
+    _realtimeChannel!.onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'vaccine_table',
+      callback: (payload) {
+        debugPrint('Real-time Vaccine Update: ${payload.eventType}');
+        _fetchDashboardData(silent: true);
+      },
+    );
+
+    _realtimeChannel!.subscribe();
+  }
+
+  Future<void> _fetchDashboardData({bool silent = false}) async {
     try {
       final session = supabase.auth.currentSession;
       if (session == null) {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
         return;
+      }
+
+      if (!silent) {
+        setState(() => _isLoading = true);
       }
 
       final accessToken = session.accessToken;
@@ -75,13 +125,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       if (results[1].statusCode == 200) {
         final List<dynamic> vaccData = json.decode(results[1].body);
+        final Map<int, Map<String, dynamic>> newVaccines = {};
         for (var v in vaccData) {
           final petId = v['pet_id'] as int;
-          _latestVaccines[petId] = {
+          newVaccines[petId] = {
             'vaccine_date': v['last_vaccine_date'],
             'vaccine_details': v['last_vaccine_details'],
           };
         }
+        _latestVaccines = newVaccines;
       }
     } catch (e) {
       debugPrint('Error fetching dashboard data: $e');
