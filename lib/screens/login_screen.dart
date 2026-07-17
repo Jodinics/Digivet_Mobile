@@ -7,6 +7,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'qr_screen.dart';
 import 'dashboard_screen.dart';
 import 'admin_dashboard_screen.dart';
+import 'register_screen.dart';
+
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -49,7 +51,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _pickAndScanQR() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    
+
     if (image == null) return;
 
     setState(() => _isLoading = true);
@@ -57,22 +59,22 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final MobileScannerController controller = MobileScannerController();
       final BarcodeCapture? capture = await controller.analyzeImage(image.path);
-      
+
       if (capture != null && capture.barcodes.isNotEmpty) {
         final String? code = capture.barcodes.first.rawValue;
         if (code != null) {
           debugPrint("Scanned QR: $code");
-          
+
           // 1. New V2 Secure Format
           if (code.startsWith("DIGIVET_V2:")) {
             try {
               final encoded = code.substring(11);
               final decoded = utf8.decode(base64Decode(encoded));
               final data = json.decode(decoded);
-              
+
               if (data is Map && data.containsKey('e') && data.containsKey('p')) {
                 _showTopSnackBar("Secure Login Detected. Authenticating...", const Color(0xFF3B82F6));
-                
+
                 final response = await supabase.auth.signInWithPassword(
                   email: data['e'],
                   password: data['p'],
@@ -100,7 +102,7 @@ class _LoginScreenState extends State<LoginScreen> {
             final data = json.decode(code);
             if (data is Map && data.containsKey('email') && data.containsKey('password')) {
               _showTopSnackBar("QR Credentials Detected. Logging in...", const Color(0xFF3B82F6));
-              
+
               final response = await supabase.auth.signInWithPassword(
                 email: data['email'],
                 password: data['password'],
@@ -115,9 +117,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
           // 4. Legacy Check
           if (code.startsWith("DIGIVET_AUTH:") || code.startsWith("DIGIVET_LOGIN:")) {
-             throw Exception("This QR format is outdated. Please re-generate the QR code from your App Settings.");
+            throw Exception("This QR format is outdated. Please re-generate the QR code from your App Settings.");
           }
-          
+
           if (code.startsWith("DIGIVET_PET_") || code.startsWith("DIGIVET_RECORD:")) {
             throw Exception("Pet Record QR codes cannot be scanned for login.");
           }
@@ -139,23 +141,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _navigateToDashboard(User user) {
     if (!mounted) return;
-    
+
     _showTopSnackBar("Welcome back!", const Color(0xFF10B981));
-    
+
     final metadata = user.userMetadata;
     final role = metadata?['role']?.toString().toLowerCase();
-    
+
     // Log for debugging
     debugPrint("Login Successful: ${user.email}, Role: $role");
 
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (context) => (role == 'admin' || role == 'vet' || role == 'veterinarian') 
-            ? const AdminDashboardScreen() 
+        builder: (context) => (role == 'admin' || role == 'vet' || role == 'veterinarian')
+            ? const AdminDashboardScreen()
             : const DashboardScreen(),
       ),
-      (route) => false,
+          (route) => false,
     );
   }
 
@@ -250,208 +252,222 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: const Color(0xFFF9FAFB),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 40),
-              Center(
-                child: Image.asset(
-                  'assets/images/logo (2).png',
-                  height: 100,
-                ),
-              ),
-              const SizedBox(height: 40),
-              const Text(
-                "Welcome back",
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF1F2937),
-                  letterSpacing: -1,
-                ),
-              ),
-              Text(
-                "Sign in to access your pet's records",
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey.shade500,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 40),
+              // ---- Card container: logo, welcome text, form ----
               Container(
-                padding: const EdgeInsets.all(6),
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(28, 36, 28, 28),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF3F4F6),
-                  borderRadius: BorderRadius.circular(16),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 30,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
                 ),
-                child: Row(
+                child: Column(
                   children: [
-                    Expanded(
-                      child: _buildToggleButton(
-                        title: "Password",
-                        isActive: !isQrLogin,
-                        onTap: () => setState(() {
-                          isQrLogin = false;
-                          _errorMessage = null;
-                        }),
+                    Image.asset(
+                      'assets/images/logo (2).png',
+                      height: 90,
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      "Welcome back",
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF1F2937),
+                        letterSpacing: -1,
                       ),
                     ),
-                    Expanded(
-                      child: _buildToggleButton(
-                        title: "QR Code",
-                        isActive: isQrLogin,
-                        onTap: () => setState(() {
-                          isQrLogin = true;
-                          _errorMessage = null;
-                        }),
+                    const SizedBox(height: 6),
+                    Text(
+                      "Sign in to access your pet's records",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade500,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF3F4F6),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildToggleButton(
+                              title: "Password",
+                              isActive: !isQrLogin,
+                              onTap: () => setState(() {
+                                isQrLogin = false;
+                                _errorMessage = null;
+                              }),
+                            ),
+                          ),
+                          Expanded(
+                            child: _buildToggleButton(
+                              title: "QR Code",
+                              isActive: isQrLogin,
+                              onTap: () => setState(() {
+                                isQrLogin = true;
+                                _errorMessage = null;
+                              }),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    if (_errorMessage != null)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        margin: const EdgeInsets.only(bottom: 20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFFEE2E2)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline_rounded, color: Color(0xFFEF4444), size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _errorMessage!,
+                                style: const TextStyle(color: Color(0xFF991B1B), fontSize: 14, fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (!isQrLogin) ...[
+                      _buildTextField(
+                        controller: _emailController,
+                        label: "Email Address",
+                        icon: Icons.email_outlined,
+                        hint: "name@example.com",
+                      ),
+                      const SizedBox(height: 20),
+                      _buildTextField(
+                        controller: _passwordController,
+                        label: "Password",
+                        icon: Icons.lock_outline_rounded,
+                        hint: "••••••••",
+                        isPassword: true,
+                      ),
+                      const SizedBox(height: 40),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryRed,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          onPressed: _isLoading ? null : _handleLogin,
+                          child: _isLoading
+                              ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+                          )
+                              : const Text(
+                            "SIGN IN",
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 1),
+                          ),
+                        ),
+                      ),
+                    ] else ...[
+                      Column(
+                        children: [
+                          const Icon(Icons.qr_code_scanner_rounded, size: 80, color: Color(0xFFD1D5DB)),
+                          const SizedBox(height: 20),
+                          const Text(
+                            "Scan Login QR",
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1F2937)),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Position your personal QR code within the scanner or upload an image.",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey.shade500, height: 1.5),
+                          ),
+                          const SizedBox(height: 32),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: primaryRed,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              ),
+                              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const QRScreen(allowRecords: false, allowLogin: true))),
+                              icon: const Icon(Icons.qr_code_scanner_rounded),
+                              label: const Text("USE SCANNER", style: TextStyle(fontWeight: FontWeight.w800)),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: primaryRed,
+                                side: BorderSide(color: primaryRed, width: 2),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              ),
+                              onPressed: _pickAndScanQR,
+                              icon: const Icon(Icons.image_rounded),
+                              label: const Text("UPLOAD IMAGE", style: TextStyle(fontWeight: FontWeight.w800)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 32),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const RegisterScreen()),
+                        );
+                      },
+                      child: RichText(
+                        text: TextSpan(
+                          style: const TextStyle(color: Color(0xFF6B7280), fontSize: 14),
+                          children: [
+                            const TextSpan(text: "Don't have an account? "),
+                            TextSpan(
+                              text: "Register here",
+                              style: TextStyle(color: primaryRed, fontWeight: FontWeight.w800),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 32),
-              if (_errorMessage != null)
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  margin: const EdgeInsets.only(bottom: 24),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFEF2F2),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFFEE2E2)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline_rounded, color: Color(0xFFEF4444), size: 20),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          _errorMessage!,
-                          style: const TextStyle(color: Color(0xFF991B1B), fontSize: 14, fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              if (!isQrLogin) ...[
-                _buildTextField(
-                  controller: _emailController,
-                  label: "Email Address",
-                  icon: Icons.email_outlined,
-                  hint: "name@example.com",
-                ),
-                const SizedBox(height: 20),
-                _buildTextField(
-                  controller: _passwordController,
-                  label: "Password",
-                  icon: Icons.lock_outline_rounded,
-                  hint: "••••••••",
-                  isPassword: true,
-                ),
-                const SizedBox(height: 40),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryRed,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    onPressed: _isLoading ? null : _handleLogin,
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
-                          )
-                        : const Text(
-                            "SIGN IN",
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 1),
-                          ),
-                  ),
-                ),
-              ] else ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(32),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.grey.shade100),
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.qr_code_scanner_rounded, size: 80, color: Color(0xFFD1D5DB)),
-                      const SizedBox(height: 20),
-                      const Text(
-                        "Scan Login QR",
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1F2937)),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "Position your personal QR code within the scanner or upload an image.",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey.shade500, height: 1.5),
-                      ),
-                      const SizedBox(height: 32),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryRed,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          ),
-                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const QRScreen(allowRecords: false, allowLogin: true))),
-                          icon: const Icon(Icons.qr_code_scanner_rounded),
-                          label: const Text("USE SCANNER", style: TextStyle(fontWeight: FontWeight.w800)),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: primaryRed,
-                            side: BorderSide(color: primaryRed, width: 2),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          ),
-                          onPressed: _pickAndScanQR,
-                          icon: const Icon(Icons.image_rounded),
-                          label: const Text("UPLOAD IMAGE", style: TextStyle(fontWeight: FontWeight.w800)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 32),
-              Center(
-                child: TextButton(
-                  onPressed: () {},
-                  child: RichText(
-                    text: TextSpan(
-                      style: const TextStyle(color: Color(0xFF6B7280), fontSize: 14),
-                      children: [
-                        const TextSpan(text: "Don't have an account? "),
-                        TextSpan(
-                          text: "Register here",
-                          style: TextStyle(color: primaryRed, fontWeight: FontWeight.w800),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 40),
+              // ---- End card container ----
             ],
           ),
         ),

@@ -8,6 +8,7 @@ import 'admin_debug_screen.dart';
 import 'admin_records_screen.dart';
 import 'approval_requests.dart';
 import 'qr_screen.dart';
+import 'notifications_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -19,11 +20,12 @@ class AdminDashboardScreen extends StatefulWidget {
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final supabase = Supabase.instance.client;
   final String backendUrl = 'https://digivetonline-api.onrender.com';
-  
+
   bool _isLoading = true;
   int _pendingCount = 0;
   int _totalPets = 0;
   int _totalVaccinations = 0;
+  int _unreadCount = 0; // <-- 1. Added state variable for notification badge
   List<dynamic> _recentRequests = [];
   Map<int, String> _petNames = {};
 
@@ -36,27 +38,37 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _fetchAdminStats() async {
     try {
       final session = supabase.auth.currentSession;
-      if (session == null) {
+      final uid = supabase.auth.currentUser?.id;
+      if (session == null || uid == null) {
         if (mounted) setState(() => _isLoading = false);
         return;
       }
-      
+
       final headers = {
         'Authorization': 'Bearer ${session.accessToken}',
         'Content-Type': 'application/json',
       };
 
-      // Fetch overview data in parallel
+      // Fetch dashboard overview data & unread notifications count in parallel
       final results = await Future.wait([
         http.get(Uri.parse('$backendUrl/api/pets/all-requests'), headers: headers).timeout(const Duration(seconds: 10)),
         http.get(Uri.parse('$backendUrl/api/vetdata/pet_table'), headers: headers).timeout(const Duration(seconds: 10)),
         http.get(Uri.parse('$backendUrl/api/vetdata/vaccine_table'), headers: headers).timeout(const Duration(seconds: 10)),
+        supabase
+            .from('notifications')
+            .select('id')
+            .or('recipient_role.eq.admin,recipient_user_id.eq.$uid')
+            .eq('is_read', false)
+            .timeout(const Duration(seconds: 10)), // <-- 2. Fetch unread notifications
       ]);
 
-      if (results.every((r) => r.statusCode == 200)) {
-        final dynamic reqData = json.decode(results[0].body);
-        final dynamic petData = json.decode(results[1].body);
-        final dynamic vaccData = json.decode(results[2].body);
+      if (results[0] is http.Response &&
+          (results[0] as http.Response).statusCode == 200) {
+
+        final dynamic reqData = json.decode((results[0] as http.Response).body);
+        final dynamic petData = json.decode((results[1] as http.Response).body);
+        final dynamic vaccData = json.decode((results[2] as http.Response).body);
+        final dynamic unreadData = results[3];
 
         if (reqData is List && petData is List && vaccData is List) {
           setState(() {
@@ -64,13 +76,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             _pendingCount = reqData.where((r) => r['status'] == 'pending').length;
             _totalPets = petData.length;
             _totalVaccinations = vaccData.length;
-            _recentRequests = reqData
-                .take(3)
-                .toList();
+            _recentRequests = reqData.take(3).toList();
+            _unreadCount = (unreadData as List).length; // Set the count
           });
         }
       } else {
-        debugPrint("Admin API Error: ${results.map((r) => r.statusCode).toList()}");
+        debugPrint("Admin API Error: Status codes matched failure.");
       }
     } catch (e) {
       debugPrint("Admin Stats Exception: $e");
@@ -94,61 +105,96 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         iconTheme: const IconThemeData(color: Color(0xFF1F2937)),
         title: Image.asset('assets/images/logo (2).png', height: 45),
         centerTitle: true,
-      ),
-      body: _isLoading 
-        ? _buildAdminSkeleton()
-        : RefreshIndicator(
-            onRefresh: _fetchAdminStats,
-            color: brandRed,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 20),
-                  const Text("Admin portal", style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.w500)),
-                  const Text("Dashboard", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Color(0xFF111827))),
-                  const SizedBox(height: 24),
-                  _buildSearchBar(),
-                  const SizedBox(height: 32),
-                  
-                  // Stats Grid
-                  Row(
-                    children: [
-                      _buildStatCard("Pending", _pendingCount.toString(), Icons.how_to_reg_rounded, Colors.orange, onTap: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const ApprovalRequestsScreen()));
-                      }),
-                      const SizedBox(width: 12),
-                      _buildStatCard("Pets", _totalPets.toString(), Icons.pets_rounded, brandRed, onTap: () {
-                         Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminRecordsScreen()));
-                      }),
-                      const SizedBox(width: 12),
-                      _buildStatCard("Vaccinations", _totalVaccinations.toString(), Icons.vaccines_rounded, Colors.blue, onTap: () {
-                         Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminRecordsScreen()));
-                      }),
-                    ],
+        actions: [
+          // <-- 3. Notification Bell Icon with dynamic badge in AppBar
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_rounded, color: Color(0xFF1F2937)),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                  ).then((_) {
+                    // Refresh stats & notification badge when returning to dashboard
+                    _fetchAdminStats();
+                  });
+                },
+              ),
+              if (_unreadCount > 0)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(color: brandRed, shape: BoxShape.circle),
+                    ),
                   ),
-                  
-                  const SizedBox(height: 32),
-                  _buildSectionHeader("Quick actions"),
-                  const SizedBox(height: 16),
-                  _buildQuickActions(),
+                ),
+            ],
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: _isLoading
+          ? _buildAdminSkeleton()
+          : RefreshIndicator(
+        onRefresh: _fetchAdminStats,
+        color: brandRed,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 20),
+              const Text("Admin portal", style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.w500)),
+              const Text("Dashboard", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Color(0xFF111827))),
+              const SizedBox(height: 24),
+              _buildSearchBar(),
+              const SizedBox(height: 32),
 
-                  const SizedBox(height: 32),
-                  _buildSectionHeader("Recent requests", onSeeAll: () {
+              // Stats Grid
+              Row(
+                children: [
+                  _buildStatCard("Pending", _pendingCount.toString(), Icons.how_to_reg_rounded, Colors.orange, onTap: () {
                     Navigator.push(context, MaterialPageRoute(builder: (context) => const ApprovalRequestsScreen()));
                   }),
-                  const SizedBox(height: 16),
-                  if (_recentRequests.isEmpty)
-                    _buildEmptyRequests()
-                  else
-                    ..._recentRequests.map((req) => _buildRequestItem(req)).toList(),
-                  const SizedBox(height: 40),
+                  const SizedBox(width: 12),
+                  _buildStatCard("Pets", _totalPets.toString(), Icons.pets_rounded, brandRed, onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminRecordsScreen()));
+                  }),
+                  const SizedBox(width: 12),
+                  _buildStatCard("Vaccinations", _totalVaccinations.toString(), Icons.vaccines_rounded, Colors.blue, onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminRecordsScreen()));
+                  }),
                 ],
               ),
-            ),
+
+              const SizedBox(height: 32),
+              _buildSectionHeader("Quick actions"),
+              const SizedBox(height: 16),
+              _buildQuickActions(),
+
+              const SizedBox(height: 32),
+              _buildSectionHeader("Recent requests", onSeeAll: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const ApprovalRequestsScreen()));
+              }),
+              const SizedBox(height: 16),
+              if (_recentRequests.isEmpty)
+                _buildEmptyRequests()
+              else
+                ..._recentRequests.map((req) => _buildRequestItem(req)).toList(),
+              const SizedBox(height: 40),
+            ],
           ),
+        ),
+      ),
     );
   }
 
@@ -376,7 +422,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final petName = _petNames[req['pet_id']] ?? "Unknown";
     final initials = petName.length >= 2 ? petName.substring(0, 2).toUpperCase() : petName.toUpperCase();
     final status = req['status']?.toString().toLowerCase() ?? 'pending';
-    
+
     Color statusColor;
     Color statusBg;
     if (status == 'approved') {

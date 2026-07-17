@@ -9,6 +9,7 @@ import 'package:gal/gal.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../widgets/menu.dart';
+import 'pet_prof.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -400,7 +401,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: Icons.person_outline_rounded,
                 title: "Edit Profile",
                 subtitle: "Change your name and personal details",
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ProfileScreen(),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 32),
               _buildSectionHeader("PREFERENCES"),

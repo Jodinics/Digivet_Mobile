@@ -4,6 +4,10 @@ import 'screens/login_screen.dart';
 import 'screens/landing_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
+import 'screens/register_screen.dart';
+
+
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

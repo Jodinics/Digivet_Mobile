@@ -8,6 +8,7 @@ import '../screens/approval_requests.dart';
 import '../screens/vacc_history.dart';
 import '../screens/settings_screen.dart';
 import '../screens/admin_debug_screen.dart';
+import '../screens/notifications_screen.dart'; // <-- 1. Added import
 
 class AppDrawer extends StatelessWidget {
   final String currentRoute;
@@ -17,7 +18,7 @@ class AppDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     const brandRed = Color(0xFF9E1B1B);
     const darkRed = Color(0xFF7B1E1E);
-    
+
     final session = Supabase.instance.client.auth.currentSession;
     final role = session?.user.userMetadata?['role']?.toString().toLowerCase();
     final bool isAdmin = role == 'admin' || role == 'vet' || role == 'veterinarian';
@@ -79,9 +80,9 @@ class AppDrawer extends StatelessWidget {
               ],
             ),
           ),
-          
+
           const SizedBox(height: 12),
-          
+
           // Navigation Items
           Expanded(
             child: ListView(
@@ -98,8 +99,8 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pushReplacement(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => isAdmin 
-                              ? const AdminDashboardScreen() 
+                          builder: (context) => isAdmin
+                              ? const AdminDashboardScreen()
                               : const DashboardScreen(),
                         ),
                       );
@@ -138,6 +139,22 @@ class AppDrawer extends StatelessWidget {
                     }
                   },
                 ),
+                // 2. Added Notifications Menu Item for everyone (Admin & Pet Owners)
+                _buildDrawerItem(
+                  context,
+                  icon: Icons.notifications_rounded,
+                  title: 'Notifications',
+                  isSelected: currentRoute == 'notifications',
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (currentRoute != 'notifications') {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                      );
+                    }
+                  },
+                ),
                 if (isAdmin)
                   _buildDrawerItem(
                     context,
@@ -154,9 +171,9 @@ class AppDrawer extends StatelessWidget {
                       }
                     },
                   ),
-                // Add an Admin-specific Analytics/Reports placeholder if needed
+                // Admin-specific Analytics/Reports placeholder
                 if (isAdmin)
-                   _buildDrawerItem(
+                  _buildDrawerItem(
                     context,
                     icon: Icons.analytics_rounded,
                     title: 'Reports',
@@ -185,7 +202,7 @@ class AppDrawer extends StatelessWidget {
               ],
             ),
           ),
-          
+
           // Footer / Settings & Logout
           Padding(
             padding: const EdgeInsets.all(24.0),
@@ -225,13 +242,13 @@ class AppDrawer extends StatelessWidget {
   }
 
   Widget _buildDrawerItem(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required bool isSelected,
-    required VoidCallback onTap,
-    bool isLogout = false,
-  }) {
+      BuildContext context, {
+        required IconData icon,
+        required String title,
+        required bool isSelected,
+        required VoidCallback onTap,
+        bool isLogout = false,
+      }) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: Material(
@@ -292,7 +309,7 @@ class AppDrawer extends StatelessWidget {
                 Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(builder: (context) => const LoginScreen()),
-                  (route) => false,
+                      (route) => false,
                 );
               }
             },
