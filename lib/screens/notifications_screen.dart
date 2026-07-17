@@ -140,45 +140,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final unreadCount = _notifications.where((n) => n['is_read'] != true).length;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       drawer: const AppDrawer(currentRoute: 'notifications'),
       appBar: AppBar(
-        backgroundColor: brandRed,
+        backgroundColor: Colors.white,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-        centerTitle: true,
+        iconTheme: const IconThemeData(color: Color(0xFF1E293B)),
         title: const Text(
-          "Lipa City Veterinary Office",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-        actions: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_rounded),
-                onPressed: () {},
-              ),
-              if (unreadCount > 0)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(color: brandRed, shape: BoxShape.circle),
-                    ),
-                  ),
-                ),
-            ],
+          "Notifications",
+          style: TextStyle(
+            color: Color(0xFF1E293B),
+            fontWeight: FontWeight.w900,
+            fontSize: 18,
           ),
-        ],
+        ),
+        centerTitle: true,
       ),
       body: _isLoading
           ? _buildSkeleton()
@@ -203,13 +180,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(vertical: 8),
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(24, 16, 24, 8),
-              child: Text(
-                "Notifications",
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF111827)),
-              ),
-            ),
             ..._notifications.map(_buildNotificationTile),
           ],
         ),

@@ -7,6 +7,7 @@ import '../widgets/menu.dart';
 import 'vacc_history.dart';
 import 'qr_screen.dart';
 import 'settings_screen.dart';
+import 'petcare_screen.dart';
 import '../widgets/skeleton_loader.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -19,7 +20,11 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final supabase = Supabase.instance.client;
   final String backendUrl = 'https://digivetonline-api.onrender.com';
-  
+
+  // Assumed interval between routine vaccinations, used to compute
+  // upcoming/overdue reminders shown on the dashboard and Pet Care screen.
+  static const int vaccineIntervalDays = 365;
+
   List<Map<String, dynamic>> _pets = [];
   Map<int, Map<String, dynamic>> _latestVaccines = {};
   String? _ownerName;
@@ -49,7 +54,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (user == null) return;
 
     final ownerId = user.userMetadata?['owner_id'];
-    
+
     // Create a channel to listen for changes
     _realtimeChannel = supabase.channel('dashboard-realtime');
 
@@ -144,8 +149,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  // Returns pets whose next vaccination is overdue or due within 30 days,
+  // sorted with the most urgent first (most negative daysUntil first).
+  List<Map<String, dynamic>> _getPetsNeedingAttention() {
+    final List<Map<String, dynamic>> results = [];
+
+    for (final pet in _pets) {
+      final petId = pet['pet_id'];
+      final latest = _latestVaccines[petId];
+      final dateStr = latest?['vaccine_date'];
+      if (dateStr == null) continue;
+
+      final lastDate = DateTime.tryParse(dateStr);
+      if (lastDate == null) continue;
+
+      final dueDate = lastDate.add(const Duration(days: vaccineIntervalDays));
+      final daysUntil = dueDate.difference(DateTime.now()).inDays;
+
+      if (daysUntil <= 30) {
+        results.add({
+          'pet': pet,
+          'daysUntil': daysUntil,
+          'dueDate': dueDate,
+        });
+      }
+    }
+
+    results.sort((a, b) => (a['daysUntil'] as int).compareTo(b['daysUntil'] as int));
+    return results;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final attentionList = _isLoading ? <Map<String, dynamic>>[] : _getPetsNeedingAttention();
+
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
       drawer: const AppDrawer(currentRoute: 'overview'),
@@ -175,43 +212,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: _isLoading
           ? _buildDashboardSkeleton()
           : RefreshIndicator(
-              onRefresh: _fetchDashboardData,
-              color: const Color(0xFF9E1B1B),
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 20),
-                    _buildGreeting(),
-                    const SizedBox(height: 32),
-                    _buildSectionHeader("MY PETS", onSeeAll: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const VaccHistoryScreen()),
-                      );
-                    }),
-                    const SizedBox(height: 16),
-                    _buildPetSection(),
-                    const SizedBox(height: 32),
-                    _buildSectionHeader("QUICK ACTIONS"),
-                    const SizedBox(height: 16),
-                    _buildQuickActions(),
-                    const SizedBox(height: 32),
-                    _buildSectionHeader("RECENT ACTIVITY", onSeeAll: () {
-                       Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const VaccHistoryScreen()),
-                      );
-                    }),
-                    const SizedBox(height: 16),
-                    _buildActivityList(),
-                    const SizedBox(height: 40),
-                  ],
-                ),
-              ),
-            ),
+        onRefresh: _fetchDashboardData,
+        color: const Color(0xFF9E1B1B),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 20),
+              _buildGreeting(),
+              if (attentionList.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                _buildVaccineReminderBanner(attentionList),
+              ],
+              const SizedBox(height: 32),
+              _buildSectionHeader("MY PETS", onSeeAll: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const VaccHistoryScreen()),
+                );
+              }),
+              const SizedBox(height: 16),
+              _buildPetSection(),
+              const SizedBox(height: 32),
+              _buildSectionHeader("QUICK ACTIONS"),
+              const SizedBox(height: 16),
+              _buildQuickActions(),
+              const SizedBox(height: 32),
+              _buildSectionHeader("RECENT ACTIVITY", onSeeAll: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const VaccHistoryScreen()),
+                );
+              }),
+              const SizedBox(height: 16),
+              _buildActivityList(),
+              const SizedBox(height: 40),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -238,6 +279,90 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  // Banner shown on the dashboard whenever one or more pets are overdue
+  // or due soon for their next vaccination. Tapping it opens the full
+  // Pet Care screen with all reminder details.
+  Widget _buildVaccineReminderBanner(List<Map<String, dynamic>> attentionList) {
+    final overdueCount = attentionList.where((e) => (e['daysUntil'] as int) < 0).length;
+    final soonCount = attentionList.length - overdueCount;
+
+    final String headline = overdueCount > 0
+        ? "${overdueCount == 1 ? '1 pet is' : '$overdueCount pets are'} overdue for vaccination"
+        : "${soonCount == 1 ? '1 pet is' : '$soonCount pets are'} due for vaccination soon";
+
+    final Map<String, dynamic> nextPet = attentionList.first;
+    final String petName = (nextPet['pet'] as Map<String, dynamic>)['pet_name'] ?? 'Your pet';
+    final int daysUntil = nextPet['daysUntil'] as int;
+    final String subtext = daysUntil < 0
+        ? "$petName's vaccine was due ${-daysUntil} day(s) ago"
+        : daysUntil == 0
+        ? "$petName's vaccine is due today"
+        : "$petName's vaccine is due in $daysUntil day(s)";
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const PetCareScreen()),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: overdueCount > 0 ? const Color(0xFFFEF2F2) : const Color(0xFFFFF7ED),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: overdueCount > 0 ? const Color(0xFFFECACA) : const Color(0xFFFED7AA),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: overdueCount > 0 ? const Color(0xFFFECACA) : const Color(0xFFFED7AA),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.vaccines_rounded,
+                color: overdueCount > 0 ? const Color(0xFF9E1B1B) : const Color(0xFFC2410C),
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    headline,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1F2937),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtext,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400),
+          ],
+        ),
+      ),
     );
   }
 
@@ -451,7 +576,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const SizedBox(height: 28),
                         ElevatedButton(
                           onPressed: () {
-                             Navigator.push(
+                            Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => VaccHistoryScreen(initialPetId: pet['pet_id']),
@@ -495,22 +620,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         _buildActionCard(
-          icon: Icons.qr_code_scanner_rounded, 
-          label: "Scanner", 
-          color: const Color(0xFFFEF2F2), 
+          icon: Icons.qr_code_scanner_rounded,
+          label: "Scanner",
+          color: const Color(0xFFFEF2F2),
           iconColor: const Color(0xFF9E1B1B),
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const QRScreen(allowLogin: false))),
         ),
         _buildActionCard(
-          icon: Icons.history_edu_rounded, 
-          label: "History", 
-          color: const Color(0xFFFEF2F2), 
+          icon: Icons.history_edu_rounded,
+          label: "History",
+          color: const Color(0xFFFEF2F2),
           iconColor: const Color(0xFF9E1B1B),
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VaccHistoryScreen())),
         ),
         _buildActionCard(
-          icon: Icons.settings_rounded, 
-          label: "Settings", 
+          icon: Icons.favorite_rounded,
+          label: "Pet Care",
+          color: const Color(0xFFFEF2F2),
+          iconColor: const Color(0xFF9E1B1B),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const PetCareScreen())),
+        ),
+        _buildActionCard(
+          icon: Icons.settings_rounded,
+          label: "Settings",
           color: const Color(0xFFFEF2F2),
           iconColor: const Color(0xFF9E1B1B),
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())),
@@ -520,9 +652,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildActionCard({
-    required IconData icon, 
-    required String label, 
-    required Color color, 
+    required IconData icon,
+    required String label,
+    required Color color,
     required Color iconColor,
     required VoidCallback onTap
   }) {
