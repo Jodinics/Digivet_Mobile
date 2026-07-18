@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../widgets/menu.dart';
+import '../services/notification_service.dart';
 
 class AdminDebugScreen extends StatefulWidget {
   const AdminDebugScreen({super.key});
@@ -11,12 +14,91 @@ class AdminDebugScreen extends StatefulWidget {
 
 class _AdminDebugScreenState extends State<AdminDebugScreen> {
   final supabase = Supabase.instance.client;
+  final String backendUrl = 'https://digivetonline-api.onrender.com';
   bool _isTestMode = false;
+  bool _isSendingBroadcast = false;
+
+  final _broadcastTitleController = TextEditingController();
+  final _broadcastBodyController = TextEditingController();
+  final _targetUidController = TextEditingController();
+  String _selectedAudience = 'Everyone';
+
   final List<String> _logs = [
     "[${DateTime.now().toString().split(' ')[1].split('.')[0]}] Debug system initialized.",
     "[${DateTime.now().toString().split(' ')[1].split('.')[0]}] Connected to Supabase.",
     "[${DateTime.now().toString().split(' ')[1].split('.')[0]}] API Endpoint: Render-API-v1",
   ];
+
+  @override
+  void dispose() {
+    _broadcastTitleController.dispose();
+    _broadcastBodyController.dispose();
+    _targetUidController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendBroadcast() async {
+    final title = _broadcastTitleController.text.trim();
+    final body = _broadcastBodyController.text.trim();
+    final targetUid = _targetUidController.text.trim();
+
+    if (title.isEmpty || body.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Title and body are required")),
+      );
+      return;
+    }
+
+    setState(() => _isSendingBroadcast = true);
+    _addLog("Dispatching to $_selectedAudience ${targetUid.isNotEmpty ? '(Target: $targetUid)' : ''}...");
+
+    try {
+      String? role;
+      String? uid;
+
+      if (_selectedAudience == 'Target User ID') {
+        uid = targetUid;
+        if (uid.isEmpty) throw Exception("Target UID is empty");
+      } else {
+        if (_selectedAudience == 'Admins only') role = 'admin';
+        if (_selectedAudience == 'Users only') role = 'pet_owner'; // Restore pet_owner
+        if (_selectedAudience == 'Everyone') role = 'all';
+      }
+
+      await NotificationService.send(
+        title: title,
+        body: body,
+        recipientRole: role,
+        recipientUserId: uid,
+        type: 'broadcast',
+      );
+
+      _addLog("Broadcast sent successfully.");
+      _broadcastTitleController.clear();
+      _broadcastBodyController.clear();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.green,
+            content: Text("Broadcast sent successfully!"),
+          ),
+        );
+      }
+    } catch (e) {
+      _addLog("Broadcast failed: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red,
+            content: Text("Failed to send broadcast: $e"),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSendingBroadcast = false);
+    }
+  }
 
   void _addLog(String message) {
     setState(() {
@@ -107,6 +189,12 @@ class _AdminDebugScreenState extends State<AdminDebugScreen> {
 
             const SizedBox(height: 32),
 
+            _buildSectionTitle("BROADCAST NOTIFICATION"),
+            const SizedBox(height: 12),
+            _buildBroadcastComposer(),
+
+            const SizedBox(height: 32),
+
             _buildSectionTitle("DEVELOPER TOOLS"),
             const SizedBox(height: 12),
             _buildToolCard([
@@ -140,6 +228,108 @@ class _AdminDebugScreenState extends State<AdminDebugScreen> {
                 Icons.sync_rounded,
                 onTap: () => _addLog("Syncing local cache..."),
               ),
+              const Divider(height: 1),
+              _buildToolTile(
+                "Read Notifications", 
+                "List all rows in notifications table", 
+                Icons.list_alt_rounded,
+                onTap: () async {
+                  setState(() => _isSendingBroadcast = true);
+                  _addLog("Fetching notifications...");
+                  try {
+                    final res = await supabase.from('notifications').select('*').limit(15);
+                    final list = res as List;
+                    _addLog("Found ${list.length} rows in DB.");
+                    for(var n in list) {
+                      final target = n['recipient_role'] ?? n['recipient_user_id'] ?? 'public';
+                      _addLog(" > [$target] ${n['title']}");
+                    }
+                  } catch (e) {
+                    _addLog("Fetch failed: $e");
+                  } finally {
+                    setState(() => _isSendingBroadcast = false);
+                  }
+                }
+              ),
+              const Divider(height: 1),
+              _buildToolTile(
+                "List Active Users", 
+                "Show all users in notification registry", 
+                Icons.supervised_user_circle_rounded,
+                onTap: () async {
+                  setState(() => _isSendingBroadcast = true);
+                  _addLog("Accessing notification registry...");
+                  try {
+                    final res = await supabase.from('notifications').select('recipient_user_id, body').eq('recipient_role', 'registry');
+                    final list = res as List;
+                    _addLog("Registry: Found ${list.length} active UIDs.");
+                    for(var r in list) {
+                      _addLog(" -> [${r['body']}] ${r['recipient_user_id'].toString().substring(0, 8)}...");
+                    }
+                  } catch (e) {
+                    _addLog("Registry access failed: $e");
+                  } finally {
+                    setState(() => _isSendingBroadcast = false);
+                  }
+                }
+              ),
+              const Divider(height: 1),
+              _buildToolTile(
+                "Probe User Database", 
+                "Deep forensic check via Backend API", 
+                Icons.manage_search_rounded,
+                onTap: () async {
+                  setState(() => _isSendingBroadcast = true);
+                  _addLog("Starting API-based forensic probe...");
+                  try {
+                    final session = supabase.auth.currentSession;
+                    if (session == null) throw Exception("No active session");
+                    
+                    final headers = {
+                      'Authorization': 'Bearer ${session.accessToken}',
+                      'Content-Type': 'application/json',
+                    };
+
+                    // 1. Probe owner_table via API
+                    try {
+                      final res = await http.get(Uri.parse('$backendUrl/api/vetdata/owner_table'), headers: headers);
+                      if (res.statusCode == 200) {
+                        final list = json.decode(res.body) as List;
+                        _addLog("API owner_table: Found ${list.length} owners.");
+                        if (list.isNotEmpty) {
+                          _addLog(" -> Sample: ${list[0]['owner_name']} (${list[0]['owner_id']})");
+                          _addLog(" -> Auth Link: ${list[0]['auth_email'] ?? 'None'}");
+                        }
+                      } else {
+                        _addLog("API owner_table: Failed (${res.statusCode})");
+                      }
+                    } catch (e) { _addLog("owner_table probe error: $e"); }
+
+                    // 2. Probe pet_edit_requests via API
+                    try {
+                      final res = await http.get(Uri.parse('$backendUrl/api/pets/all-requests'), headers: headers);
+                      if (res.statusCode == 200) {
+                        final list = json.decode(res.body) as List;
+                        _addLog("API pet_requests: Found ${list.length} rows.");
+                        if (list.isNotEmpty) {
+                          _addLog(" -> Sample Owner ID: ${list[0]['owner_id']}");
+                        }
+                      }
+                    } catch (e) { _addLog("requests probe error: $e"); }
+
+                    // 3. Check for UIDs in existing notifications (Direct Supabase)
+                    try {
+                      final n = await supabase.from('notifications').select('recipient_user_id').not('recipient_user_id', 'is', null).limit(5);
+                      _addLog("DB Notifications: Found ${(n as List).length} UID-targeted rows.");
+                    } catch (e) { _addLog("DB notification check failed (RLS)."); }
+
+                  } catch (e) {
+                    _addLog("General probe failure: $e");
+                  } finally {
+                    setState(() => _isSendingBroadcast = false);
+                  }
+                }
+              ),
             ]),
 
             const SizedBox(height: 24),
@@ -147,8 +337,9 @@ class _AdminDebugScreenState extends State<AdminDebugScreen> {
             _buildSectionTitle("ACCOUNT INFO"),
             const SizedBox(height: 12),
             _buildToolCard([
-              _buildInfoRow("Role", "Administrator"),
-              _buildInfoRow("UID", supabase.auth.currentUser?.id.substring(0, 8) ?? "N/A"),
+              _buildInfoRow("Role", supabase.auth.currentUser?.userMetadata?['role'] ?? "N/A"),
+              _buildInfoRow("UID", supabase.auth.currentUser?.id ?? "N/A"),
+              _buildInfoRow("Metadata", supabase.auth.currentUser?.userMetadata?.toString() ?? "{}"),
               _buildInfoRow("Last Login", DateTime.now().toString().split(' ')[0]),
             ]),
             
@@ -167,6 +358,109 @@ class _AdminDebugScreenState extends State<AdminDebugScreen> {
             const SizedBox(height: 20),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBroadcastComposer() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _broadcastTitleController,
+            decoration: InputDecoration(
+              hintText: "Notification Title",
+              filled: true,
+              fillColor: const Color(0xFFF1F5F9),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _broadcastBodyController,
+            maxLines: 3,
+            decoration: InputDecoration(
+              hintText: "Notification Message/Body",
+              filled: true,
+              fillColor: const Color(0xFFF1F5F9),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.all(16),
+            ),
+            style: const TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          if (_selectedAudience == 'Target User ID') ...[
+            TextField(
+              controller: _targetUidController,
+              decoration: InputDecoration(
+                hintText: "Enter Target User UID",
+                filled: true,
+                fillColor: const Color(0xFFF1F5F9),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              style: const TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedAudience,
+                      isExpanded: true,
+                      style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B), fontWeight: FontWeight.w600),
+                      items: ['Everyone', 'Admins only', 'Users only', 'Target User ID']
+                          .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                          .toList(),
+                      onChanged: (v) => setState(() => _selectedAudience = v!),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: _isSendingBroadcast ? null : _sendBroadcast,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF9E1B1B),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    elevation: 0,
+                  ),
+                  child: _isSendingBroadcast
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text("Send", style: TextStyle(fontWeight: FontWeight.bold)),
+                            SizedBox(width: 8),
+                            Icon(Icons.send_rounded, size: 16),
+                          ],
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -244,7 +538,8 @@ class _AdminDebugScreenState extends State<AdminDebugScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF64748B))),
-          Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF1E293B))),
+          const SizedBox(width: 12),
+          Expanded(child: Text(value, textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)))),
         ],
       ),
     );

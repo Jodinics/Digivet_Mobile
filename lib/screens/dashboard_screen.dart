@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/menu.dart';
+import '../services/notification_service.dart';
+import 'notifications_screen.dart';
 import 'vacc_history.dart';
 import 'qr_screen.dart';
 import 'settings_screen.dart';
@@ -29,6 +31,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<int, Map<String, dynamic>> _latestVaccines = {};
   String? _ownerName;
   bool _isLoading = true;
+  int _unreadCount = 0;
   int _currentPetPage = 0;
   final PageController _pageController = PageController();
   RealtimeChannel? _realtimeChannel;
@@ -38,6 +41,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     _fetchDashboardData();
     _setupRealtimeListener();
+    _checkInForNotifications();
+  }
+
+  Future<void> _checkInForNotifications() async {
+    try {
+      await NotificationService.checkIn();
+    } catch (e) {
+      debugPrint('Notification check-in failed: $e');
+    }
   }
 
   @override
@@ -121,15 +133,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
             'Content-Type': 'application/json',
           },
         ),
+        NotificationService.getUnreadCount(),
       ]);
 
-      if (results[0].statusCode == 200) {
-        final List<dynamic> petsData = json.decode(results[0].body);
+      final petsRes = results[0] as http.Response;
+      final vaccRes = results[1] as http.Response;
+
+      if (petsRes.statusCode == 200) {
+        final List<dynamic> petsData = json.decode(petsRes.body);
         _pets = List<Map<String, dynamic>>.from(petsData);
       }
 
-      if (results[1].statusCode == 200) {
-        final List<dynamic> vaccData = json.decode(results[1].body);
+      if (vaccRes.statusCode == 200) {
+        final List<dynamic> vaccData = json.decode(vaccRes.body);
         final Map<int, Map<String, dynamic>> newVaccines = {};
         for (var v in vaccData) {
           final petId = v['pet_id'] as int;
@@ -140,6 +156,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
         _latestVaccines = newVaccines;
       }
+      
+      setState(() {
+        _unreadCount = results[2] as int;
+      });
     } catch (e) {
       debugPrint('Error fetching dashboard data: $e');
     } finally {
@@ -196,16 +216,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         centerTitle: true,
         actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
-            child: IconButton(
-              onPressed: () {},
-              icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF1F2937)),
-            ),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(right: 16),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                    ).then((_) => _fetchDashboardData(silent: true));
+                  },
+                  icon: Icon(
+                    _unreadCount > 0 ? Icons.notifications_active_rounded : Icons.notifications_none_rounded,
+                    color: _unreadCount > 0 ? const Color(0xFF9E1B1B) : const Color(0xFF1F2937),
+                  ),
+                ),
+              ),
+              if (_unreadCount > 0)
+                Positioned(
+                  top: 0,
+                  right: 16,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(color: Color(0xFF9E1B1B), shape: BoxShape.circle),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
       ),

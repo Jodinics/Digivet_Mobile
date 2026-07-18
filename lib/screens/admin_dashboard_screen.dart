@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
 import '../widgets/menu.dart';
 import '../widgets/skeleton_loader.dart';
+import '../services/notification_service.dart';
 import 'admin_debug_screen.dart';
 import 'admin_records_screen.dart';
 import 'approval_requests.dart';
@@ -54,12 +55,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         http.get(Uri.parse('$backendUrl/api/pets/all-requests'), headers: headers).timeout(const Duration(seconds: 10)),
         http.get(Uri.parse('$backendUrl/api/vetdata/pet_table'), headers: headers).timeout(const Duration(seconds: 10)),
         http.get(Uri.parse('$backendUrl/api/vetdata/vaccine_table'), headers: headers).timeout(const Duration(seconds: 10)),
-        supabase
-            .from('notifications')
-            .select('id')
-            .or('recipient_role.eq.admin,recipient_user_id.eq.$uid')
-            .eq('is_read', false)
-            .timeout(const Duration(seconds: 10)), // <-- 2. Fetch unread notifications
+        NotificationService.getUnreadCount(),
       ]);
 
       if (results[0] is http.Response &&
@@ -68,7 +64,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         final dynamic reqData = json.decode((results[0] as http.Response).body);
         final dynamic petData = json.decode((results[1] as http.Response).body);
         final dynamic vaccData = json.decode((results[2] as http.Response).body);
-        final dynamic unreadData = results[3];
+        final int unreadCount = results[3] as int;
 
         if (reqData is List && petData is List && vaccData is List) {
           setState(() {
@@ -77,7 +73,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             _totalPets = petData.length;
             _totalVaccinations = vaccData.length;
             _recentRequests = reqData.take(3).toList();
-            _unreadCount = (unreadData as List).length; // Set the count
+            _unreadCount = unreadCount;
           });
         }
       } else {

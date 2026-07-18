@@ -35,20 +35,44 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Future<void> _fetchNotifications() async {
     try {
-      final uid = supabase.auth.currentUser?.id;
-      if (uid == null) {
+      final user = supabase.auth.currentUser;
+      if (user == null) {
         if (mounted) setState(() => _isLoading = false);
         return;
       }
 
-      // Admins see broadcast ('admin') notifications plus anything
-      // targeted specifically at them.
+      final uid = user.id;
+      final role = user.userMetadata?['role']?.toString().toLowerCase() ?? '';
+      final isAdmin = role == 'admin' || role == 'vet' || role == 'veterinarian';
+
+      debugPrint("Notifications DEBUG: UID=$uid, Role='$role', IsAdmin=$isAdmin");
+
+      // We use a wide set of conditions to be safe.
+      final conditions = [
+        'recipient_user_id.eq.$uid',
+        'recipient_role.eq.all',
+        'recipient_role.eq.public',
+        'recipient_role.eq.pet_owner',
+        'recipient_role.eq.client',
+        'recipient_role.eq.user',
+        if (isAdmin) 'recipient_role.eq.admin',
+      ];
+
+      // Hide silent system notifications from the main UI
       final data = await supabase
           .from('notifications')
           .select()
-          .or('recipient_role.eq.admin,recipient_user_id.eq.$uid')
+          .or(conditions.join(','))
+          .not('type', 'eq', 'system')
           .order('created_at', ascending: false)
           .limit(100);
+
+      debugPrint("Notifications DEBUG: Query returned ${(data as List).length} items.");
+
+      if (data.isEmpty) {
+        final probe = await supabase.from('notifications').select('id').eq('recipient_user_id', uid).limit(1);
+        debugPrint("Notifications DEBUG: UID-only probe returned ${probe.length} items.");
+      }
 
       if (mounted) {
         setState(() {
@@ -73,9 +97,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       table: 'notifications',
       callback: (payload) {
         final newRow = payload.newRecord;
-        final uid = supabase.auth.currentUser?.id;
-        final isForMe = newRow['recipient_role'] == 'admin' ||
-            newRow['recipient_user_id'] == uid;
+        final user = supabase.auth.currentUser;
+        if (user == null) return;
+        
+        final uid = user.id;
+        final role = user.userMetadata?['role']?.toString().toLowerCase() ?? '';
+        final isAdmin = role == 'admin' || role == 'vet' || role == 'veterinarian';
+        
+        final recRole = newRow['recipient_role']?.toString().toLowerCase();
+        final recUid = newRow['recipient_user_id'];
+
+        bool isForMe = recUid == uid || recRole == 'all';
+        if (isAdmin) {
+          if (recRole == 'admin') isForMe = true;
+        } else {
+          if (recRole == 'pet_owner' || recRole == 'client' || recRole == 'user') isForMe = true;
+        }
+
         if (isForMe && mounted) {
           setState(() {
             _notifications.insert(0, newRow);
@@ -218,10 +256,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       color: const Color(0xFF1F2937),
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  if (notif['body'] != null && notif['body'].toString().isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      notif['body'],
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 4),
                   Text(
                     _timeAgo(notif['created_at'] ?? ''),
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500, fontWeight: FontWeight.w500),
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade400, fontWeight: FontWeight.w500),
                   ),
                 ],
               ),

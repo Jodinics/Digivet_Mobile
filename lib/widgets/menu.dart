@@ -233,6 +233,30 @@ class AppDrawer extends StatelessWidget {
                   isLogout: true,
                   onTap: () => _showLogoutDialog(context),
                 ),
+                const SizedBox(height: 12),
+                const Divider(color: Colors.white10, height: 1),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "DEBUG INFO",
+                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white.withOpacity(0.3), letterSpacing: 1),
+                      ),
+                      const SizedBox(height: 4),
+                      SelectableText(
+                        "UID: ${Supabase.instance.client.auth.currentUser?.id ?? 'N/A'}",
+                        style: TextStyle(fontSize: 8, color: Colors.white.withOpacity(0.5), fontFamily: 'monospace'),
+                      ),
+                      Text(
+                        "Role: ${Supabase.instance.client.auth.currentUser?.userMetadata?['role'] ?? 'N/A'}",
+                        style: TextStyle(fontSize: 8, color: Colors.white.withOpacity(0.5)),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),

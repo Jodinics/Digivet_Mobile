@@ -427,16 +427,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () {},
               ),
               const SizedBox(height: 32),
-              _buildSectionHeader("ABOUT"),
+              _buildSectionHeader("DEBUG INFO"),
               const SizedBox(height: 16),
-              _buildSettingCard(
-                icon: Icons.info_outline_rounded,
-                title: "Digivet Online",
-                subtitle: "Version 1.0.0 (Proposal Build)",
-                onTap: () {},
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildDebugRow("UID", supabase.auth.currentUser?.id ?? 'N/A'),
+                    const Divider(height: 24),
+                    _buildDebugRow("Email", supabase.auth.currentUser?.email ?? 'N/A'),
+                    const Divider(height: 24),
+                    _buildDebugRow("Role", supabase.auth.currentUser?.userMetadata?['role'] ?? 'N/A'),
+                    const Divider(height: 24),
+                    _buildDebugRow("Metadata", supabase.auth.currentUser?.userMetadata?.toString() ?? '{}'),
+                  ],
+                ),
               ),
+              const SizedBox(height: 40),
             ],
           ),
+    );
+  }
+
+  Widget _buildDebugRow(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w900,
+            color: Colors.grey.shade500,
+            letterSpacing: 1,
+          ),
+        ),
+        const SizedBox(height: 4),
+        SelectableText(
+          value,
+          style: const TextStyle(
+            fontSize: 12,
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF1E293B),
+          ),
+        ),
+      ],
     );
   }
 
