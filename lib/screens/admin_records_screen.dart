@@ -21,19 +21,19 @@ enum ViewType { owners, pets }
 class _AdminRecordsScreenState extends State<AdminRecordsScreen> {
   final supabase = Supabase.instance.client;
   final String backendUrl = 'https://digivetonline-api.onrender.com';
-  
+
   bool _isLoading = true;
   List<dynamic> _owners = [];
   List<dynamic> _pets = [];
   List<dynamic> _vaccines = [];
   List<dynamic> _filteredOwners = [];
   List<dynamic> _filteredPets = [];
-  
+
   Map<int, List<dynamic>> _petsByOwner = {};
   Map<int, List<dynamic>> _vaccinesByPet = {};
   Map<int, Map<String, dynamic>> _ownerMap = {};
   Map<int, String> _barangayMap = {};
-  
+
   AdminFilter _activeFilter = AdminFilter.all;
   ViewType _currentView = ViewType.owners;
   final TextEditingController _searchController = TextEditingController();
@@ -59,7 +59,7 @@ class _AdminRecordsScreenState extends State<AdminRecordsScreen> {
   void _applyFilters() {
     setState(() {
       final query = _searchController.text.toLowerCase();
-      
+
       if (_currentView == ViewType.owners) {
         List<dynamic> baseList = List.from(_owners);
 
@@ -67,16 +67,16 @@ class _AdminRecordsScreenState extends State<AdminRecordsScreen> {
         if (_activeFilter == AdminFilter.recentOwners) {
           baseList.sort((a, b) => (b['owner_id'] as int).compareTo(a['owner_id'] as int));
         } else if (_activeFilter == AdminFilter.recentPets) {
-           final recentPetOwnerIds = List.from(_pets)
-              ..sort((a, b) => (b['pet_id'] as int).compareTo(a['pet_id'] as int));
-           final topOwnerIds = recentPetOwnerIds.take(10).map((p) => p['owner_id']).toSet();
-           baseList = _owners.where((o) => topOwnerIds.contains(o['owner_id'])).toList();
+          final recentPetOwnerIds = List.from(_pets)
+            ..sort((a, b) => (b['pet_id'] as int).compareTo(a['pet_id'] as int));
+          final topOwnerIds = recentPetOwnerIds.take(10).map((p) => p['owner_id']).toSet();
+          baseList = _owners.where((o) => topOwnerIds.contains(o['owner_id'])).toList();
         } else if (_activeFilter == AdminFilter.recentVaccines) {
-           final recentVaccines = List.from(_vaccines)
-              ..sort((a, b) => (b['vaccine_id'] as int).compareTo(a['vaccine_id'] as int));
-           final recentPetIds = recentVaccines.take(10).map((v) => v['pet_id']).toSet();
-           final recentOwnerIds = _pets.where((p) => recentPetIds.contains(p['pet_id'])).map((p) => p['owner_id']).toSet();
-           baseList = _owners.where((o) => recentOwnerIds.contains(o['owner_id'])).toList();
+          final recentVaccines = List.from(_vaccines)
+            ..sort((a, b) => (b['vaccine_id'] as int).compareTo(a['vaccine_id'] as int));
+          final recentPetIds = recentVaccines.take(10).map((v) => v['pet_id']).toSet();
+          final recentOwnerIds = _pets.where((p) => recentPetIds.contains(p['pet_id'])).map((p) => p['owner_id']).toSet();
+          baseList = _owners.where((o) => recentOwnerIds.contains(o['owner_id'])).toList();
         }
 
         // Apply Search Query
@@ -86,23 +86,23 @@ class _AdminRecordsScreenState extends State<AdminRecordsScreen> {
           final contact = (owner['contact_number'] ?? owner['contact_no'])?.toString().toLowerCase() ?? '';
           final brgyId = owner['barangay_id'];
           final brgyName = (_barangayMap[brgyId] ?? owner['barangay_name'] ?? '').toString().toLowerCase();
-          
+
           final ownerId = owner['owner_id'];
           final hasMatchingPet = (_petsByOwner[ownerId] ?? []).any((pet) {
             final petName = pet['pet_name']?.toString().toLowerCase() ?? '';
             return petName.contains(query);
           });
 
-          return name.contains(query) || 
-                 email.contains(query) || 
-                 contact.contains(query) || 
-                 brgyName.contains(query) ||
-                 hasMatchingPet;
+          return name.contains(query) ||
+              email.contains(query) ||
+              contact.contains(query) ||
+              brgyName.contains(query) ||
+              hasMatchingPet;
         }).toList();
       } else {
         // Pets view filtering
         List<dynamic> baseList = List.from(_pets);
-        
+
         if (_activeFilter == AdminFilter.recentPets) {
           baseList.sort((a, b) => (b['pet_id'] as int).compareTo(a['pet_id'] as int));
         }
@@ -110,16 +110,14 @@ class _AdminRecordsScreenState extends State<AdminRecordsScreen> {
         _filteredPets = baseList.where((pet) {
           final petName = pet['pet_name']?.toString().toLowerCase() ?? '';
           final petType = pet['pet_type']?.toString().toLowerCase() ?? '';
-          final petBreed = pet['pet_breed']?.toString().toLowerCase() ?? '';
-          
+
           final ownerId = pet['owner_id'];
           final owner = _ownerMap[ownerId];
           final ownerName = owner?['owner_name']?.toString().toLowerCase() ?? '';
 
-          return petName.contains(query) || 
-                 petType.contains(query) || 
-                 petBreed.contains(query) ||
-                 ownerName.contains(query);
+          return petName.contains(query) ||
+              petType.contains(query) ||
+              ownerName.contains(query);
         }).toList();
       }
     });
@@ -128,9 +126,9 @@ class _AdminRecordsScreenState extends State<AdminRecordsScreen> {
   Future<void> _fetchData() async {
     final session = supabase.auth.currentSession;
     if (session == null) return;
-    
+
     setState(() => _isLoading = true);
-    
+
     final headers = {
       'Authorization': 'Bearer ${session.accessToken}',
       'Content-Type': 'application/json',
@@ -149,9 +147,9 @@ class _AdminRecordsScreenState extends State<AdminRecordsScreen> {
         _pets = json.decode(results[1].body);
         _vaccines = json.decode(results[2].body);
         final barangays = json.decode(results[3].body) as List;
-        
+
         _barangayMap = {for (var b in barangays) b['barangay_id']: b['barangay_name']};
-        
+
         _processData();
         _applyFilters();
       }
@@ -168,7 +166,7 @@ class _AdminRecordsScreenState extends State<AdminRecordsScreen> {
     for (var owner in _owners) {
       _ownerMap[owner['owner_id']] = owner;
     }
-    
+
     for (var pet in _pets) {
       final ownerId = pet['owner_id'];
       if (ownerId != null) {
@@ -184,6 +182,572 @@ class _AdminRecordsScreenState extends State<AdminRecordsScreen> {
       }
     }
   }
+
+  // ---------------------------------------------------------------------
+  // OWNER EDIT / DELETE  (direct Supabase calls)
+  // ---------------------------------------------------------------------
+
+  Map<String, String> _authHeaders() {
+    final session = supabase.auth.currentSession;
+    return {
+      'Authorization': 'Bearer ${session?.accessToken ?? ''}',
+      'Content-Type': 'application/json',
+    };
+  }
+
+  // NOTE: writes go through the backend (which can use a service-role key
+  // and its own auth check) instead of calling Supabase directly from the
+  // app. Direct Supabase writes were being silently blocked by RLS since
+  // there's no policy mapping auth.uid() to an admin in user_table.
+  // These assume PUT/DELETE routes exist alongside the existing GET ones —
+  // adjust the paths below if your backend names them differently.
+
+  Future<bool> _updateOwner(int ownerId, Map<String, dynamic> data) async {
+    try {
+
+      final response = await http.patch(
+      Uri.parse('$backendUrl/api/vetdata/owner_table/$ownerId'),
+      headers: _authHeaders(),
+      body: json.encode(data),
+    );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        debugPrint("Update owner error: ${response.statusCode} ${response.body}");
+        _lastErrorMessage = _extractBackendError(response.body) ?? "Failed to update owner (${response.statusCode})";
+        return false;
+      }
+      await _fetchData();
+      return true;
+    } catch (e) {
+      debugPrint("Update owner error: $e");
+      _lastErrorMessage = null;
+      return false;
+    }
+  }
+
+  Future<bool> _deleteOwner(int ownerId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$backendUrl/api/vetdata/owner_table/$ownerId'),
+        headers: _authHeaders(),
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        debugPrint("Delete owner error: ${response.statusCode} ${response.body}");
+        _lastErrorMessage = _extractBackendError(response.body) ?? "Failed to delete owner (${response.statusCode})";
+        return false;
+      }
+      await _fetchData();
+      return true;
+    } catch (e) {
+      debugPrint("Delete owner error: $e");
+      _lastErrorMessage = null;
+      return false;
+    }
+  }
+
+  String? _extractBackendError(String body) {
+    try {
+      final decoded = json.decode(body);
+      if (decoded is Map && decoded['message'] != null) return decoded['message'].toString();
+      if (decoded is Map && decoded['error'] != null) return decoded['error'].toString();
+    } catch (_) {}
+    return null;
+  }
+
+  // ---------------------------------------------------------------------
+  // PET EDIT / DELETE  (direct Supabase calls)
+  // ---------------------------------------------------------------------
+
+  Future<bool> _updatePet(int petId, Map<String, dynamic> data) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('$backendUrl/api/vetdata/pet_table/$petId'),
+        headers: _authHeaders(),
+        body: json.encode(data),
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        debugPrint("Update pet error: ${response.statusCode} ${response.body}");
+        _lastErrorMessage = _extractBackendError(response.body) ?? "Failed to update pet (${response.statusCode})";
+        return false;
+      }
+      await _fetchData();
+      return true;
+    } catch (e) {
+      debugPrint("Update pet error: $e");
+      _lastErrorMessage = null;
+      return false;
+    }
+  }
+
+  Future<bool> _deletePet(int petId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$backendUrl/api/vetdata/pet_table/$petId'),
+        headers: _authHeaders(),
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        debugPrint("Delete pet error: ${response.statusCode} ${response.body}");
+        _lastErrorMessage = _extractBackendError(response.body) ?? "Failed to delete pet (${response.statusCode})";
+        return false;
+      }
+      await _fetchData();
+      return true;
+    } catch (e) {
+      debugPrint("Delete pet error: $e");
+      _lastErrorMessage = null;
+      return false;
+    }
+  }
+
+  // Holds the most recent Supabase error message so the snackbar can show
+  // something more useful than a generic "failed" (e.g. RLS or FK errors).
+  String? _lastErrorMessage;
+
+  void _showSnack(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(fontWeight: FontWeight.w600)),
+        backgroundColor: isError ? Colors.red.shade600 : darkGrey,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  void _showEditOwnerSheet(Map<String, dynamic> owner) {
+    final nameController = TextEditingController(text: owner['owner_name']?.toString() ?? '');
+    final emailController = TextEditingController(text: owner['email']?.toString() ?? '');
+    final contactController = TextEditingController(
+      text: (owner['contact_number'] ?? owner['contact_no'] ?? '').toString(),
+    );
+    int? selectedBarangayId = owner['barangay_id'];
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setModalState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(sheetContext).viewInsets.bottom),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+            ),
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    "Edit Owner",
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: darkGrey),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Update this owner's information",
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade500, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildEditTextField(nameController, "Owner Name", Icons.person_rounded),
+                  const SizedBox(height: 14),
+                  _buildEditTextField(emailController, "Email", Icons.email_rounded,
+                      keyboardType: TextInputType.emailAddress),
+                  const SizedBox(height: 14),
+                  _buildEditTextField(contactController, "Contact Number", Icons.phone_rounded,
+                      keyboardType: TextInputType.phone),
+                  const SizedBox(height: 14),
+                  _buildBarangayDropdown(
+                    selectedBarangayId,
+                        (val) => setModalState(() => selectedBarangayId = val),
+                  ),
+                  const SizedBox(height: 28),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: isSaving ? null : () => Navigator.pop(sheetContext),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            side: BorderSide(color: Colors.grey.shade300),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                          child: Text("Cancel",
+                              style: TextStyle(fontWeight: FontWeight.w800, color: Colors.grey.shade600)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                          onPressed: isSaving
+                              ? null
+                              : () async {
+                            if (nameController.text.trim().isEmpty) {
+                              _showSnack("Owner name cannot be empty", isError: true);
+                              return;
+                            }
+                            setModalState(() => isSaving = true);
+                            final success = await _updateOwner(owner['owner_id'], {
+                              'owner_name': nameController.text.trim(),
+                              'email': emailController.text.trim(),
+                              'contact_number': contactController.text.trim(),
+                              'barangay_id': selectedBarangayId,
+                            });
+                            if (!sheetContext.mounted) return;
+                            if (success) {
+                              Navigator.pop(sheetContext);
+                              _showSnack("Owner updated successfully");
+                            } else {
+                              setModalState(() => isSaving = false);
+                              _showSnack(
+                                _lastErrorMessage ?? "Failed to update owner",
+                                isError: true,
+                              );
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: brandRed,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                          child: isSaving
+                              ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                              : const Text("Save Changes",
+                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Colors.white)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showEditPetSheet(Map<String, dynamic> pet) {
+    final nameController = TextEditingController(text: pet['pet_name']?.toString() ?? '');
+    final typeController = TextEditingController(text: pet['pet_type']?.toString() ?? '');
+    final ageController = TextEditingController(text: pet['pet_age']?.toString() ?? '');
+    final colorController = TextEditingController(text: pet['pet_color']?.toString() ?? '');
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setModalState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(sheetContext).viewInsets.bottom),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+            ),
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    "Edit Pet",
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: darkGrey),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Update this pet's information",
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade500, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildEditTextField(nameController, "Pet Name", Icons.pets_rounded),
+                  const SizedBox(height: 14),
+                  _buildEditTextField(typeController, "Type (e.g. Dog, Cat)", Icons.category_rounded),
+                  const SizedBox(height: 14),
+                  _buildEditTextField(ageController, "Age (e.g. 2 Years)", Icons.cake_rounded),
+                  const SizedBox(height: 14),
+                  _buildEditTextField(colorController, "Color", Icons.palette_rounded),
+                  const SizedBox(height: 28),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: isSaving ? null : () => Navigator.pop(sheetContext),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            side: BorderSide(color: Colors.grey.shade300),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                          child: Text("Cancel",
+                              style: TextStyle(fontWeight: FontWeight.w800, color: Colors.grey.shade600)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                          onPressed: isSaving
+                              ? null
+                              : () async {
+                            if (nameController.text.trim().isEmpty) {
+                              _showSnack("Pet name cannot be empty", isError: true);
+                              return;
+                            }
+                            setModalState(() => isSaving = true);
+                            final success = await _updatePet(pet['pet_id'], {
+                              'pet_name': nameController.text.trim(),
+                              'pet_type': typeController.text.trim(),
+                              'pet_age': ageController.text.trim(),
+                              'pet_color': colorController.text.trim(),
+                            });
+                            if (!sheetContext.mounted) return;
+                            if (success) {
+                              Navigator.pop(sheetContext);
+                              _showSnack("Pet updated successfully");
+                            } else {
+                              setModalState(() => isSaving = false);
+                              _showSnack(
+                                _lastErrorMessage ?? "Failed to update pet",
+                                isError: true,
+                              );
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: brandRed,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                          child: isSaving
+                              ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                              : const Text("Save Changes",
+                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Colors.white)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEditTextField(TextEditingController controller, String label, IconData icon,
+      {TextInputType? keyboardType}) {
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      style: const TextStyle(fontWeight: FontWeight.w600, color: darkGrey),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.w600),
+        prefixIcon: Icon(icon, color: mediumGrey, size: 20),
+        filled: true,
+        fillColor: lightBg,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      ),
+    );
+  }
+
+  Widget _buildBarangayDropdown(int? selectedId, ValueChanged<int?> onChanged) {
+    final validValue = _barangayMap.containsKey(selectedId) ? selectedId : null;
+    return Container(
+      decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(14)),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          isExpanded: true,
+          value: validValue,
+          hint: Text("Select Barangay",
+              style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.w600)),
+          icon: const Icon(Icons.arrow_drop_down_rounded, color: mediumGrey),
+          items: _barangayMap.entries
+              .map((e) => DropdownMenuItem<int>(
+            value: e.key,
+            child: Text(e.value, style: const TextStyle(fontWeight: FontWeight.w600, color: darkGrey)),
+          ))
+              .toList(),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteOwner(Map<String, dynamic> owner) {
+    final ownerId = owner['owner_id'];
+    final petCount = (_petsByOwner[ownerId] ?? []).length;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_rounded, color: Colors.red.shade600),
+            const SizedBox(width: 8),
+            const Text("Delete Owner?", style: TextStyle(fontWeight: FontWeight.w900, color: darkGrey)),
+          ],
+        ),
+        content: Text(
+          petCount > 0
+              ? "${owner['owner_name'] ?? 'This owner'} has $petCount pet(s) on record. Deleting this owner may also affect their pets' records. This action cannot be undone."
+              : "Are you sure you want to delete ${owner['owner_name'] ?? 'this owner'}? This action cannot be undone.",
+          style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text("Cancel", style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w700)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              final success = await _deleteOwner(ownerId);
+              _showSnack(
+                success
+                    ? "Owner deleted successfully"
+                    : (_lastErrorMessage ?? "Failed to delete owner"),
+                isError: !success,
+              );
+            },
+            child: Text("Delete", style: TextStyle(color: Colors.red.shade600, fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeletePet(Map<String, dynamic> pet) {
+    final petId = pet['pet_id'];
+    final vaccineCount = (_vaccinesByPet[petId] ?? []).length;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_rounded, color: Colors.red.shade600),
+            const SizedBox(width: 8),
+            const Text("Delete Pet?", style: TextStyle(fontWeight: FontWeight.w900, color: darkGrey)),
+          ],
+        ),
+        content: Text(
+          vaccineCount > 0
+              ? "${pet['pet_name'] ?? 'This pet'} has $vaccineCount vaccine record(s). Deleting this pet may also affect those records. This action cannot be undone."
+              : "Are you sure you want to delete ${pet['pet_name'] ?? 'this pet'}? This action cannot be undone.",
+          style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text("Cancel", style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w700)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              final success = await _deletePet(petId);
+              _showSnack(
+                success
+                    ? "Pet deleted successfully"
+                    : (_lastErrorMessage ?? "Failed to delete pet"),
+                isError: !success,
+              );
+            },
+            child: Text("Delete", style: TextStyle(color: Colors.red.shade600, fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOwnerActionRow(Map<String, dynamic> owner) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        _buildActionChip(Icons.edit_rounded, "Edit", Colors.blue.shade700, () => _showEditOwnerSheet(owner)),
+        const SizedBox(width: 8),
+        _buildActionChip(Icons.delete_rounded, "Delete", Colors.red.shade600, () => _confirmDeleteOwner(owner)),
+      ],
+    );
+  }
+
+  Widget _buildPetActionRow(Map<String, dynamic> pet) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        _buildActionChip(Icons.edit_rounded, "Edit", Colors.blue.shade700, () => _showEditPetSheet(pet)),
+        const SizedBox(width: 8),
+        _buildActionChip(Icons.delete_rounded, "Delete", Colors.red.shade600, () => _confirmDeletePet(pet)),
+      ],
+    );
+  }
+
+  Widget _buildActionChip(IconData icon, String label, Color color, VoidCallback onTap) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 4),
+              Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------
 
   void _showFilterSheet() {
     showModalBottomSheet(
@@ -486,7 +1050,7 @@ class _AdminRecordsScreenState extends State<AdminRecordsScreen> {
               child: TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: _currentView == ViewType.owners ? "Search owners, contact, barangay..." : "Search pet name, breed, species...",
+                  hintText: _currentView == ViewType.owners ? "Search owners, contact, barangay..." : "Search pet name, species...",
                   hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
                   prefixIcon: const Icon(Icons.search_rounded, color: Colors.grey, size: 22),
                   border: InputBorder.none,
@@ -627,6 +1191,8 @@ class _AdminRecordsScreenState extends State<AdminRecordsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Divider(height: 32),
+                  _buildOwnerActionRow(owner),
+                  const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -731,12 +1297,16 @@ class _AdminRecordsScreenState extends State<AdminRecordsScreen> {
                         style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: darkGrey),
                       ),
                       Text(
-                        "${pet['pet_type'] ?? 'N/A'} • ${pet['pet_breed'] ?? 'N/A'}",
+                        "${pet['pet_type'] ?? 'N/A'}",
                         style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
                 ),
+                _buildActionChip(Icons.edit_rounded, "", Colors.blue.shade700, () => _showEditPetSheet(pet)),
+                const SizedBox(width: 6),
+                _buildActionChip(Icons.delete_rounded, "", Colors.red.shade600, () => _confirmDeletePet(pet)),
+                const SizedBox(width: 6),
                 const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Colors.grey),
               ],
             ),
@@ -790,7 +1360,7 @@ class _AdminRecordsScreenState extends State<AdminRecordsScreen> {
                             style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: darkGrey),
                           ),
                           Text(
-                            "${pet['pet_type'] ?? 'N/A'} • ${pet['pet_breed'] ?? 'N/A'}",
+                            "${pet['pet_type'] ?? 'N/A'}",
                             style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w600),
                           ),
                         ],
@@ -803,12 +1373,13 @@ class _AdminRecordsScreenState extends State<AdminRecordsScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                _buildPetActionRow(pet),
                 const Divider(height: 32),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     _buildPetStat("AGE", "${pet['pet_age'] ?? '?'} Yrs"),
-                    _buildPetStat("SEX", pet['pet_sex'] ?? 'N/A'),
                     _buildPetStat("COLOR", pet['pet_color'] ?? 'N/A'),
                     _buildPetStat("VACCINES", petVaccines.length.toString()),
                   ],
@@ -875,9 +1446,9 @@ class _AdminRecordsScreenState extends State<AdminRecordsScreen> {
       itemBuilder: (context, index) => Padding(
         padding: const EdgeInsets.only(bottom: 16),
         child: SkeletonLoader(
-          width: double.infinity, 
-          height: _currentView == ViewType.owners ? 100 : 180, 
-          borderRadius: 24
+            width: double.infinity,
+            height: _currentView == ViewType.owners ? 100 : 180,
+            borderRadius: 24
         ),
       ),
     );
